@@ -3,9 +3,9 @@ package handler
 import (
 	"net/http"
 	"strconv"
-	"strings"
 
 	models "github.com/AnxVit/metrics-server/internal/model"
+	"github.com/go-chi/chi/v5"
 )
 
 type iService interface {
@@ -13,30 +13,31 @@ type iService interface {
 }
 
 type Handler struct {
+	chi.Router
+
 	service iService
 }
 
 func NewHandler(service iService) *Handler {
-	return &Handler{
+	h := &Handler{
 		service: service,
 	}
+	r := chi.NewRouter()
+	r.Post("/update/{type}/{name}/{value}", h.handlePostMetric)
+
+	h.Router = r
+	return h
 }
 
-func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "", http.StatusMethodNotAllowed)
-		return
-	}
+func (h *Handler) handlePostMetric(w http.ResponseWriter, r *http.Request) {
+	metricType := chi.URLParam(r, "type")
+	metricName := chi.URLParam(r, "name")
+	metricValue := chi.URLParam(r, "value")
 
-	pathsParts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
-	if len(pathsParts) != 4 || pathsParts[0] != "update" {
+	if metricType == "" || metricName == "" || metricValue == "" {
 		http.NotFound(w, r)
 		return
 	}
-
-	metricType := pathsParts[1]
-	metricName := pathsParts[2]
-	metricValue := pathsParts[3]
 
 	metric := &models.Metrics{
 		ID:    metricName,
