@@ -9,13 +9,15 @@ import (
 )
 
 func main() {
+	parseFlag()
+
 	repo := repository.NewMemStorage()
 
 	service := service.NewService(repo)
 
 	handler := handler.NewHandler(service)
 
-	err := http.ListenAndServe(`:8080`, handler)
+	err := http.ListenAndServe(addr, handler)
 	if err != nil {
 		panic(err)
 	}
