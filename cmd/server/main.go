@@ -10,7 +10,8 @@ import (
 )
 
 func main() {
-	parseFlag()
+	var addr string
+	parseFlag(&addr)
 
 	repo := repository.NewMemStorage()
 

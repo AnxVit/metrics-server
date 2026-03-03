@@ -24,6 +24,6 @@ func parseFlag(opt *options) {
 	})
 
 	flag.IntVar(&opt.reportInterval, "r", 10, "report interval")
-	flag.IntVar(&opt.reportInterval, "p", 2, "poll interval")
+	flag.IntVar(&opt.pollInterval, "p", 2, "poll interval")
 	flag.Parse()
 }
