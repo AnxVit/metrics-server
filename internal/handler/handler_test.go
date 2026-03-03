@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	models "github.com/AnxVit/metrics-server/internal/model"
 	"github.com/AnxVit/metrics-server/internal/repository"
 	"github.com/AnxVit/metrics-server/internal/service"
 )
@@ -32,7 +33,7 @@ func Test_PostMetric(t *testing.T) {
 			name:   "bad path (length)",
 			method: http.MethodPost,
 			path:   "/update/gauge/someMetrics",
-			code:   404,
+			code:   405,
 		},
 		{
 			name:   "bad value",
@@ -60,8 +61,62 @@ func Test_PostMetric(t *testing.T) {
 			h.ServeHTTP(rr, req)
 
 			if rr.Code != test.code {
-				t.Errorf("got %q, want %q", rr.Code, test.code)
+				t.Errorf("got %d, want %d", rr.Code, test.code)
 			}
 		})
 	}
+}
+
+func Test_GetMetric(t *testing.T) {
+	repo := repository.NewMemStorage() // later mock
+	serv := service.NewService(repo)
+	serv.SaveMetric(&models.Metrics{
+		ID:    "someMetric",
+		MType: models.Gauge,
+		Value: toPointer(37.0),
+	})
+	tests := []struct {
+		name   string
+		method string
+		path   string
+		code   int
+	}{
+		{
+			name:   "bad method",
+			method: http.MethodPost,
+			path:   "/value/gauge/someMetric",
+			code:   405,
+		},
+		{
+			name:   "bad path",
+			method: http.MethodGet,
+			path:   "/value/gauge/someMetric/45.0",
+			code:   404,
+		},
+		{
+			name:   "success",
+			method: http.MethodGet,
+			path:   "/value/gauge/someMetric",
+			code:   200,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+
+			h := NewHandler(serv)
+
+			req := httptest.NewRequest(test.method, test.path, nil)
+			rr := httptest.NewRecorder()
+
+			h.ServeHTTP(rr, req)
+
+			if rr.Code != test.code {
+				t.Errorf("got %d, want %d", rr.Code, test.code)
+			}
+		})
+	}
+}
+
+func toPointer[T any](val T) *T {
+	return &val
 }
