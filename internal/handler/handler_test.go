@@ -33,7 +33,7 @@ func Test_PostMetric(t *testing.T) {
 			name:   "bad path (length)",
 			method: http.MethodPost,
 			path:   "/update/gauge/someMetrics",
-			code:   405,
+			code:   404,
 		},
 		{
 			name:   "bad value",
