@@ -1,0 +1,67 @@
+package handler
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/AnxVit/metrics-server/internal/repository"
+	"github.com/AnxVit/metrics-server/internal/service"
+)
+
+func Test_PostMetric(t *testing.T) {
+	tests := []struct {
+		name   string
+		method string
+		path   string
+		code   int
+	}{
+		{
+			name:   "bad method",
+			method: http.MethodGet,
+			path:   "/update/gauge/someMetrics/70.0",
+			code:   405,
+		},
+		{
+			name:   "bad path (without update)",
+			method: http.MethodPost,
+			path:   "/gauge/someMetrics/70.0",
+			code:   404,
+		},
+		{
+			name:   "bad path (length)",
+			method: http.MethodPost,
+			path:   "/update/gauge/someMetrics",
+			code:   404,
+		},
+		{
+			name:   "bad value",
+			method: http.MethodPost,
+			path:   "/update/gauge/someMetrics/value",
+			code:   400,
+		},
+		{
+			name:   "success",
+			method: http.MethodPost,
+			path:   "/update/gauge/someMetrics/70.0",
+			code:   200,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			repo := repository.NewMemStorage() // later mock
+			serv := service.NewService(repo)
+
+			h := NewHandler(serv)
+
+			req := httptest.NewRequest(test.method, test.path, nil)
+			rr := httptest.NewRecorder()
+
+			h.ServeHTTP(rr, req)
+
+			if rr.Code != test.code {
+				t.Errorf("got %q, want %q", rr.Code, test.code)
+			}
+		})
+	}
+}
