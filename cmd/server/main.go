@@ -10,8 +10,8 @@ import (
 )
 
 func main() {
-	var addr string
-	parseFlag(&addr)
+	var opt Options
+	parseFlag(&opt)
 
 	repo := repository.NewMemStorage()
 
@@ -19,9 +19,9 @@ func main() {
 
 	handler := handler.NewHandler(service)
 
-	log.Printf("Listen %s", addr)
+	log.Printf("Listen %s", opt.Addr)
 
-	err := http.ListenAndServe(addr, handler)
+	err := http.ListenAndServe(opt.Addr, handler)
 	if err != nil {
 		panic(err)
 	}
