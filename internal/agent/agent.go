@@ -1,15 +1,13 @@
 package agent
 
 import (
+	"fmt"
 	"log"
 	"math/rand"
 	"net/http"
 	"runtime"
-	"strconv"
 	"sync"
 	"time"
-
-	"github.com/go-resty/resty/v2"
 )
 
 const (
@@ -105,30 +103,33 @@ func (a *Agent) getRuntimeInfo() map[string]float64 {
 }
 
 func (a *Agent) sendInfo(info map[string]float64, poolCount int) error {
-	client := resty.New()
-
 	for name, value := range info {
-		_, err := client.R().
-			SetHeader("Content-Type", "text/plain").
-			SetPathParams(map[string]string{
-				"name":  name,
-				"value": strconv.FormatFloat(value, 'g', -1, 64),
-			}).
-			Post(a.addr + "/update/gauge/{name}/{value}")
+		url := a.addr + fmt.Sprintf("/update/gauge/%s/%f", name, value)
+		req, err := http.NewRequest(http.MethodPost, url, nil)
 		if err != nil {
 			return err
 		}
+
+		req.Header.Set("Content-Type", "text/plain")
+		response, err := a.client.Do(req)
+		if err != nil {
+			return err
+		}
+		response.Body.Close()
 	}
 
-	_, err := client.R().
-		SetHeader("Content-Type", "text/plain").
-		SetPathParams(map[string]string{
-			"value": strconv.FormatInt(int64(poolCount), 10),
-		}).
-		Post(a.addr + "/update/counter/PollCount/{value}")
+	url := a.addr + fmt.Sprintf("/update/counter/PollCount/%d", poolCount)
+	req, err := http.NewRequest(http.MethodPost, url, nil)
 	if err != nil {
 		return err
 	}
+
+	req.Header.Set("Content-Type", "text/plain")
+	response, err := a.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer response.Body.Close()
 
 	log.Println("Successfully send")
 	return nil

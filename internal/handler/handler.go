@@ -1,136 +1,42 @@
 package handler
 
 import (
-	"encoding/json"
-	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	models "github.com/AnxVit/metrics-server/internal/model"
-	"github.com/go-chi/chi/v5"
 )
 
 type iService interface {
 	SaveMetric(metric *models.Metrics) error
-	GetMetric(metricType, name string) (*models.Metrics, error)
-	GetAll() []models.Metrics
 }
 
 type Handler struct {
-	chi.Router
-
 	service iService
 }
 
 func NewHandler(service iService) *Handler {
-	h := &Handler{
+	return &Handler{
 		service: service,
 	}
-	r := chi.NewRouter()
-	r.Route("/", func(r chi.Router) {
-		r.Get("/", h.handleGetAll)
-		r.Get("/value/{type}/{name}", h.handleGetMetric)
-		r.Post("/update/{type}/{name}/{value}", h.handlePostMetric)
-	})
-
-	h.Router = r
-	return h
 }
 
-func (h *Handler) handleGetAll(w http.ResponseWriter, r *http.Request) {
-	metrics := h.service.GetAll()
-
-	html := `<!DOCTYPE html>
-<html>
-<head>
-    <title>Метрики</title>
-    <style>
-        table { border-collapse: collapse; width: 50%; margin: 20px; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-        th { background-color: #f2f2f2; }
-        tr:hover { background-color: #f5f5f5; }
-    </style>
-</head>
-<body>
-    <h1>Метрики приложения</h1>
-    <table>
-        <tr>
-            <th>Ключ</th>
-            <th>Значение</th>
-        </tr>`
-
-	for _, m := range metrics {
-		if m.Value != nil {
-			html += fmt.Sprintf(`
-        <tr>
-            <td>%s</td>
-            <td>%v</td>
-        </tr>`, m.ID, *m.Value)
-		}
-		if m.Delta != nil {
-			html += fmt.Sprintf(`
-        <tr>
-            <td>%s</td>
-            <td>%v</td>
-        </tr>`, m.ID, *m.Delta)
-		}
-
+func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "", http.StatusMethodNotAllowed)
+		return
 	}
 
-	html += `
-    </table>
-</body>
-</html>`
-
-	w.Header().Set("Content-Type", "text/html")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(html))
-}
-
-func (h *Handler) handleGetMetric(w http.ResponseWriter, r *http.Request) {
-	metricType := chi.URLParam(r, "type")
-	metricName := chi.URLParam(r, "name")
-
-	if metricType == "" || metricName == "" {
+	pathsParts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	if len(pathsParts) != 4 || pathsParts[0] != "update" {
 		http.NotFound(w, r)
 		return
 	}
 
-	metric, err := h.service.GetMetric(metricType, metricName)
-	if err != nil || metric == nil {
-		http.Error(w, "", http.StatusNotFound)
-		return
-	}
-
-	var resp []byte
-	switch {
-	case metric.Delta != nil:
-		resp, err = json.Marshal(metric.Delta)
-	case metric.Value != nil:
-		resp, err = json.Marshal(metric.Value)
-	default:
-		http.Error(w, "", 500)
-		return
-	}
-	if err != nil {
-		http.Error(w, err.Error(), 500)
-		return
-	}
-
-	w.Header().Set("Content-Type", "text/plain")
-	w.WriteHeader(http.StatusOK)
-	w.Write(resp)
-}
-
-func (h *Handler) handlePostMetric(w http.ResponseWriter, r *http.Request) {
-	metricType := chi.URLParam(r, "type")
-	metricName := chi.URLParam(r, "name")
-	metricValue := chi.URLParam(r, "value")
-
-	if metricType == "" || metricName == "" || metricValue == "" {
-		http.NotFound(w, r)
-		return
-	}
+	metricType := pathsParts[1]
+	metricName := pathsParts[2]
+	metricValue := pathsParts[3]
 
 	metric := &models.Metrics{
 		ID:    metricName,
