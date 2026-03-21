@@ -1,6 +1,6 @@
 module github.com/AnxVit/metrics-server
 
-go 1.24.0
+go 1.25.0
 
 require (
 	github.com/caarlos0/env/v6 v6.10.1
