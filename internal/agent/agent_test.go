@@ -24,7 +24,7 @@ func Test_SendInfo(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	agent := NewAgent(ts.URL)
+	agent := NewAgent(ts.URL, 10, 2)
 
 	info := map[string]float64{
 		"info": 0.0,
