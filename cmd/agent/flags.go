@@ -39,5 +39,4 @@ func parseFlag(opt *Options) {
 	if len(parts) == 2 {
 		opt.Addr = "http://" + opt.Addr
 	}
-	opt.Addr = opt.Addr
 }
