@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"net/http"
 
 	"github.com/AnxVit/metrics-server/internal/handler"
@@ -9,13 +10,18 @@ import (
 )
 
 func main() {
+	var addr string
+	parseFlag(&addr)
+
 	repo := repository.NewMemStorage()
 
 	service := service.NewService(repo)
 
 	handler := handler.NewHandler(service)
 
-	err := http.ListenAndServe(`:8080`, handler)
+	log.Printf("Listen %s", addr)
+
+	err := http.ListenAndServe(addr, handler)
 	if err != nil {
 		panic(err)
 	}

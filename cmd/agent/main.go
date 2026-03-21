@@ -1,9 +1,17 @@
 package main
 
-import "github.com/AnxVit/metrics-server/internal/agent"
+import (
+	"github.com/AnxVit/metrics-server/internal/agent"
+)
 
 func main() {
-	client := agent.NewAgent("http://localhost:8080")
+	var opt options
+	parseFlag(&opt)
+	client := agent.NewAgent(
+		opt.addr,
+		opt.reportInterval,
+		opt.pollInterval,
+	)
 
 	client.Work()
 }

@@ -12,22 +12,22 @@ import (
 	"github.com/go-resty/resty/v2"
 )
 
-const (
-	reportInterval = 10 * time.Second
-	pollInterval   = 2 * time.Second
-)
-
 type Agent struct {
 	client *http.Client
-	addr   string
+
+	addr           string
+	reportInterval time.Duration
+	pollInterval   time.Duration
 }
 
-func NewAgent(addr string) *Agent {
+func NewAgent(addr string, reportInter, pollInter int) *Agent {
 	return &Agent{
 		client: &http.Client{
 			Timeout: 100 * time.Millisecond,
 		},
-		addr: addr,
+		addr:           addr,
+		reportInterval: time.Duration(reportInter) * time.Second,
+		pollInterval:   time.Duration(pollInter) * time.Second,
 	}
 }
 
@@ -43,7 +43,7 @@ func (a *Agent) Work() {
 	go func() {
 		defer wg.Done()
 		for {
-			time.Sleep(pollInterval)
+			time.Sleep(a.pollInterval)
 			mu.Lock()
 			info = a.getRuntimeInfo()
 			pollCount += 1
@@ -54,7 +54,7 @@ func (a *Agent) Work() {
 	go func() {
 		defer wg.Done()
 		for {
-			time.Sleep(reportInterval)
+			time.Sleep(a.reportInterval)
 			mu.Lock()
 			err := a.sendInfo(info, pollCount)
 			if err != nil {
