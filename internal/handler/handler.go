@@ -6,8 +6,10 @@ import (
 	"net/http"
 	"strconv"
 
-	models "github.com/AnxVit/metrics-server/internal/model"
 	"github.com/go-chi/chi/v5"
+
+	"github.com/AnxVit/metrics-server/internal/handler/middleware"
+	models "github.com/AnxVit/metrics-server/internal/model"
 )
 
 type iService interface {
@@ -27,6 +29,7 @@ func NewHandler(service iService) *Handler {
 		service: service,
 	}
 	r := chi.NewRouter()
+	r.Use(middleware.Logger)
 	r.Route("/", func(r chi.Router) {
 		r.Get("/", h.handleGetAll)
 		r.Get("/value/{type}/{name}", h.handleGetMetric)
