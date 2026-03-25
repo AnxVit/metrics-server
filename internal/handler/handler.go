@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 
@@ -33,6 +34,8 @@ func NewHandler(service iService) *Handler {
 		r.Get("/", h.handleGetAll)
 		r.Post("/value", h.handleGetMetric)
 		r.Post("/update", h.handlePostMetric)
+		r.Get("/value/{type}/{name}", h.handleGetMetricParameters)
+		r.Post("/update/{type}/{name}/{value}", h.handlePostMetricParameters)
 	})
 
 	h.Router = r
@@ -118,6 +121,42 @@ func (h *Handler) handleGetMetric(w http.ResponseWriter, r *http.Request) {
 	w.Write(resp)
 }
 
+func (h *Handler) handleGetMetricParameters(w http.ResponseWriter, r *http.Request) {
+	metricType := chi.URLParam(r, "type")
+	metricName := chi.URLParam(r, "name")
+
+	if metricType == "" || metricName == "" {
+		http.NotFound(w, r)
+		return
+	}
+
+	metric, err := h.service.GetMetric(metricType, metricName)
+	if err != nil || metric == nil {
+		http.Error(w, "", http.StatusNotFound)
+		return
+	}
+
+	var resp []byte
+	switch {
+	case metric.Delta != nil:
+		resp, err = json.Marshal(metric.Delta)
+	case metric.Value != nil:
+		resp, err = json.Marshal(metric.Value)
+	default:
+		http.Error(w, "", 500)
+		return
+	}
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(http.StatusOK)
+	w.Write(resp)
+
+}
+
 func (h *Handler) handlePostMetric(w http.ResponseWriter, r *http.Request) {
 	var req models.Metrics
 	err := json.NewDecoder(r.Body).Decode(&req)
@@ -136,6 +175,40 @@ func (h *Handler) handlePostMetric(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.service.SaveMetric(&req); err != nil {
+		http.Error(w, "", http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(http.StatusOK)
+}
+
+func (h *Handler) handlePostMetricParameters(w http.ResponseWriter, r *http.Request) {
+	metricType := chi.URLParam(r, "type")
+	metricName := chi.URLParam(r, "name")
+	metricValue := chi.URLParam(r, "value")
+
+	if metricType == "" || metricName == "" || metricValue == "" {
+		http.NotFound(w, r)
+		return
+	}
+
+	metric := &models.Metrics{
+		ID:    metricName,
+		MType: metricType,
+	}
+
+	delta, err := strconv.ParseInt(metricValue, 0, 64)
+	if err == nil {
+		metric.Delta = &delta
+	}
+
+	value, err := strconv.ParseFloat(metricValue, 64)
+	if err == nil {
+		metric.Value = &value
+	}
+
+	if err := h.service.SaveMetric(metric); err != nil {
 		http.Error(w, "", http.StatusBadRequest)
 		return
 	}
