@@ -108,6 +108,7 @@ func (a *Agent) getRuntimeInfo() map[string]float64 {
 		"StackSys":      float64(m.StackSys),
 		"Sys":           float64(m.Sys),
 		"RandomValue":   rand.Float64(),
+		"TotalAlloc":    float64(m.TotalAlloc),
 	}
 	return runtimeInfo
 }
