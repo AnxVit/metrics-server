@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
+	chimiddleware "github.com/go-chi/chi/v5/middleware"
 
 	"github.com/AnxVit/metrics-server/internal/handler/middleware"
 	models "github.com/AnxVit/metrics-server/internal/model"
@@ -30,6 +31,7 @@ func NewHandler(service iService) *Handler {
 	}
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
+	r.Use(chimiddleware.StripSlashes)
 	r.Route("/", func(r chi.Router) {
 		r.Get("/", h.handleGetAll)
 		r.Post("/value", h.handleGetMetric)
