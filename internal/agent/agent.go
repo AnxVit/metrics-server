@@ -2,7 +2,7 @@ package agent
 
 import (
 	"bytes"
-	"compress/flate"
+	"compress/gzip"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -165,16 +165,14 @@ func (a *Agent) sendInfo(client *resty.Client, req *Request) error {
 func Compress(data []byte) ([]byte, error) {
 	var b bytes.Buffer
 
-	w, err := flate.NewWriter(&b, flate.BestCompression)
-	if err != nil {
-		return nil, fmt.Errorf("failed init compress writer: %v", err)
-	}
-	_, err = w.Write(data)
+	writer := gzip.NewWriter(&b)
+
+	_, err := writer.Write(data)
 	if err != nil {
 		return nil, fmt.Errorf("failed write data to compress temporary buffer: %v", err)
 	}
 
-	err = w.Close()
+	err = writer.Close()
 	if err != nil {
 		return nil, fmt.Errorf("failed compress data: %v", err)
 	}
