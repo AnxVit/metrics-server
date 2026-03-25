@@ -1,6 +1,8 @@
 package agent
 
 import (
+	"bytes"
+	"compress/flate"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -64,7 +66,7 @@ func (a *Agent) Work() {
 		for {
 			time.Sleep(a.reportInterval)
 			mu.Lock()
-			err := a.sendInfo(info, int64(pollCount))
+			err := a.sendAllInfo(info, int64(pollCount))
 			if err != nil {
 				log.Printf("ERR: %v\n", err)
 			}
@@ -113,7 +115,7 @@ func (a *Agent) getRuntimeInfo() map[string]float64 {
 	return runtimeInfo
 }
 
-func (a *Agent) sendInfo(info map[string]float64, poolCount int64) error {
+func (a *Agent) sendAllInfo(info map[string]float64, poolCount int64) error {
 	client := resty.New()
 
 	for name, value := range info {
@@ -122,17 +124,8 @@ func (a *Agent) sendInfo(info map[string]float64, poolCount int64) error {
 			MType: "gauge",
 			Value: &value,
 		}
-		jsonBody, err := json.Marshal(req)
-		if err != nil {
-			return err
-		}
-		resp, err := client.R().
-			SetHeader("Content-Type", "application/json").
-			SetBody(jsonBody).
-			Post(a.addr + "/update")
-		if err != nil || resp.StatusCode() != 200 {
-			return fmt.Errorf("bad answer: %d", resp.StatusCode())
-		}
+
+		a.sendInfo(client, req)
 	}
 
 	req := &Request{
@@ -141,19 +134,49 @@ func (a *Agent) sendInfo(info map[string]float64, poolCount int64) error {
 		Delta: &poolCount,
 	}
 
+	a.sendInfo(client, req)
+
+	log.Println("Successfully send")
+	return nil
+}
+
+func (a *Agent) sendInfo(client *resty.Client, req *Request) error {
 	jsonBody, err := json.Marshal(req)
+	if err != nil {
+		return err
+	}
+
+	jsonBody, err = Compress(jsonBody)
 	if err != nil {
 		return err
 	}
 
 	resp, err := client.R().
 		SetHeader("Content-Type", "application/json").
+		SetHeader("Content-Encoding", "gzip").
 		SetBody(jsonBody).
 		Post(a.addr + "/update")
 	if err != nil || resp.StatusCode() != 200 {
 		return fmt.Errorf("bad answer: %d", resp.StatusCode())
 	}
-
-	log.Println("Successfully send")
 	return nil
+}
+
+func Compress(data []byte) ([]byte, error) {
+	var b bytes.Buffer
+
+	w, err := flate.NewWriter(&b, flate.BestCompression)
+	if err != nil {
+		return nil, fmt.Errorf("failed init compress writer: %v", err)
+	}
+	_, err = w.Write(data)
+	if err != nil {
+		return nil, fmt.Errorf("failed write data to compress temporary buffer: %v", err)
+	}
+
+	err = w.Close()
+	if err != nil {
+		return nil, fmt.Errorf("failed compress data: %v", err)
+	}
+	return b.Bytes(), nil
 }
