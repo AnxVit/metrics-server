@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"bytes"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -15,37 +17,41 @@ func Test_PostMetric(t *testing.T) {
 		name   string
 		method string
 		path   string
+		req    *models.Metrics
 		code   int
 	}{
 		{
 			name:   "bad method",
 			method: http.MethodGet,
-			path:   "/update/gauge/someMetrics/70.0",
-			code:   405,
+			path:   "/update",
+			req: &models.Metrics{
+				ID:    "someMetrics",
+				MType: "gauge",
+				Value: toPointer(70.0),
+			},
+			code: 405,
 		},
 		{
-			name:   "bad path (without update)",
+			name:   "bad path",
 			method: http.MethodPost,
-			path:   "/gauge/someMetrics/70.0",
-			code:   404,
-		},
-		{
-			name:   "bad path (length)",
-			method: http.MethodPost,
-			path:   "/update/gauge/someMetrics",
-			code:   404,
-		},
-		{
-			name:   "bad value",
-			method: http.MethodPost,
-			path:   "/update/gauge/someMetrics/value",
-			code:   400,
+			path:   "/gauge",
+			req: &models.Metrics{
+				ID:    "someMetrics",
+				MType: "gauge",
+				Value: toPointer(70.0),
+			},
+			code: 404,
 		},
 		{
 			name:   "success",
 			method: http.MethodPost,
-			path:   "/update/gauge/someMetrics/70.0",
-			code:   200,
+			path:   "/update",
+			req: &models.Metrics{
+				ID:    "someMetrics",
+				MType: "gauge",
+				Value: toPointer(70.0),
+			},
+			code: 200,
 		},
 	}
 	for _, test := range tests {
@@ -55,7 +61,11 @@ func Test_PostMetric(t *testing.T) {
 
 			h := NewHandler(serv)
 
-			req := httptest.NewRequest(test.method, test.path, nil)
+			data, _ := json.Marshal(test.req)
+
+			reader := bytes.NewReader(data)
+
+			req := httptest.NewRequest(test.method, test.path, reader)
 			rr := httptest.NewRecorder()
 
 			h.ServeHTTP(rr, req)
@@ -79,25 +89,38 @@ func Test_GetMetric(t *testing.T) {
 		name   string
 		method string
 		path   string
+		req    *models.Metrics
 		code   int
 	}{
 		{
 			name:   "bad method",
-			method: http.MethodPost,
-			path:   "/value/gauge/someMetric",
-			code:   405,
+			method: http.MethodGet,
+			path:   "/value",
+			req: &models.Metrics{
+				ID:    "someMetric",
+				MType: "gauge",
+			},
+			code: 405,
 		},
 		{
 			name:   "bad path",
-			method: http.MethodGet,
-			path:   "/value/gauge/someMetric/45.0",
-			code:   404,
+			method: http.MethodPost,
+			path:   "/value/gauge",
+			req: &models.Metrics{
+				ID:    "someMetric",
+				MType: "gauge",
+			},
+			code: 404,
 		},
 		{
 			name:   "success",
-			method: http.MethodGet,
-			path:   "/value/gauge/someMetric",
-			code:   200,
+			method: http.MethodPost,
+			path:   "/value",
+			req: &models.Metrics{
+				ID:    "someMetric",
+				MType: "gauge",
+			},
+			code: 200,
 		},
 	}
 	for _, test := range tests {
@@ -105,7 +128,11 @@ func Test_GetMetric(t *testing.T) {
 
 			h := NewHandler(serv)
 
-			req := httptest.NewRequest(test.method, test.path, nil)
+			data, _ := json.Marshal(test.req)
+
+			reader := bytes.NewReader(data)
+
+			req := httptest.NewRequest(test.method, test.path, reader)
 			rr := httptest.NewRecorder()
 
 			h.ServeHTTP(rr, req)

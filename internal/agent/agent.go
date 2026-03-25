@@ -1,16 +1,25 @@
 package agent
 
 import (
+	"encoding/json"
+	"errors"
+	"fmt"
 	"log"
 	"math/rand"
 	"net/http"
 	"runtime"
-	"strconv"
 	"sync"
 	"time"
 
 	"github.com/go-resty/resty/v2"
 )
+
+type Request struct {
+	ID    string   `json:"id"`
+	MType string   `json:"type"`
+	Delta *int64   `json:"delta,omitempty"`
+	Value *float64 `json:"value,omitempty"`
+}
 
 type Agent struct {
 	client *http.Client
@@ -56,7 +65,7 @@ func (a *Agent) Work() {
 		for {
 			time.Sleep(a.reportInterval)
 			mu.Lock()
-			err := a.sendInfo(info, pollCount)
+			err := a.sendInfo(info, int64(pollCount))
 			if err != nil {
 				log.Printf("ERR: %v\n", err)
 			}
@@ -104,30 +113,45 @@ func (a *Agent) getRuntimeInfo() map[string]float64 {
 	return runtimeInfo
 }
 
-func (a *Agent) sendInfo(info map[string]float64, poolCount int) error {
+func (a *Agent) sendInfo(info map[string]float64, poolCount int64) error {
 	client := resty.New()
 
 	for name, value := range info {
-		_, err := client.R().
-			SetHeader("Content-Type", "text/plain").
-			SetPathParams(map[string]string{
-				"name":  name,
-				"value": strconv.FormatFloat(value, 'g', -1, 64),
-			}).
-			Post(a.addr + "/update/gauge/{name}/{value}")
+		req := &Request{
+			ID:    name,
+			MType: "gauge",
+			Value: &value,
+		}
+		jsonBody, err := json.Marshal(req)
 		if err != nil {
 			return err
 		}
+		resp, err := client.R().
+			SetHeader("Content-Type", "application/json").
+			SetBody(jsonBody).
+			Post(a.addr + "/update")
+		if err != nil || resp.StatusCode() != 200 {
+			return errors.New(fmt.Sprintf("bad answer: %d", resp.StatusCode()))
+		}
 	}
 
-	_, err := client.R().
-		SetHeader("Content-Type", "text/plain").
-		SetPathParams(map[string]string{
-			"value": strconv.FormatInt(int64(poolCount), 10),
-		}).
-		Post(a.addr + "/update/counter/PollCount/{value}")
+	req := &Request{
+		ID:    "PollCount",
+		MType: "counter",
+		Delta: &poolCount,
+	}
+
+	jsonBody, err := json.Marshal(req)
 	if err != nil {
 		return err
+	}
+
+	resp, err := client.R().
+		SetHeader("Content-Type", "application/json").
+		SetBody(jsonBody).
+		Post(a.addr + "/update")
+	if err != nil || resp.StatusCode() != 200 {
+		return errors.New(fmt.Sprintf("bad answer: %d", resp.StatusCode()))
 	}
 
 	log.Println("Successfully send")

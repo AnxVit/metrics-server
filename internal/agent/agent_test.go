@@ -1,9 +1,9 @@
 package agent
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -16,11 +16,18 @@ func Test_SendInfo(t *testing.T) {
 			return
 		}
 
-		pathsParts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
-		if len(pathsParts) != 4 || pathsParts[0] != "update" {
+		if r.URL.Path != "/update" {
 			http.NotFound(w, r)
 			return
 		}
+
+		var req Request
+		err := json.NewDecoder(r.Body).Decode(&req)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+		}
+
+		w.WriteHeader(http.StatusOK)
 	}))
 	defer ts.Close()
 
