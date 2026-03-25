@@ -2,7 +2,6 @@ package agent
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
 	"math/rand"
@@ -131,7 +130,7 @@ func (a *Agent) sendInfo(info map[string]float64, poolCount int64) error {
 			SetBody(jsonBody).
 			Post(a.addr + "/update")
 		if err != nil || resp.StatusCode() != 200 {
-			return errors.New(fmt.Sprintf("bad answer: %d", resp.StatusCode()))
+			return fmt.Errorf("bad answer: %d", resp.StatusCode())
 		}
 	}
 
@@ -151,7 +150,7 @@ func (a *Agent) sendInfo(info map[string]float64, poolCount int64) error {
 		SetBody(jsonBody).
 		Post(a.addr + "/update")
 	if err != nil || resp.StatusCode() != 200 {
-		return errors.New(fmt.Sprintf("bad answer: %d", resp.StatusCode()))
+		return fmt.Errorf("bad answer: %d", resp.StatusCode())
 	}
 
 	log.Println("Successfully send")
