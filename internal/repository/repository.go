@@ -107,9 +107,8 @@ func (m *MemStorage) restoreData() {
 
 func (m *MemStorage) worker() { // add ctx for shutdown
 	for {
-		select {
-		case <-time.After(m.updateDuration):
-		}
+		time.Sleep(m.updateDuration)
+
 		var allMetrics []models.Metrics
 
 		for name, value := range m.gaugeMetrics {
