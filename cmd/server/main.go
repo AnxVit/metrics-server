@@ -1,10 +1,11 @@
 package main
 
 import (
-	"log"
+	"fmt"
 	"net/http"
 
 	"github.com/AnxVit/metrics-server/internal/handler"
+	"github.com/AnxVit/metrics-server/internal/logger"
 	"github.com/AnxVit/metrics-server/internal/repository"
 	"github.com/AnxVit/metrics-server/internal/service"
 )
@@ -13,13 +14,15 @@ func main() {
 	var opt Options
 	parseFlag(&opt)
 
+	logger.Initialize("INFO") // tmp: to cfg
+
 	repo := repository.NewMemStorage()
 
 	service := service.NewService(repo)
 
 	handler := handler.NewHandler(service)
 
-	log.Printf("Listen %s", opt.Addr)
+	logger.Log.Info(fmt.Sprintf("Listen %s", opt.Addr))
 
 	err := http.ListenAndServe(opt.Addr, handler)
 	if err != nil {
