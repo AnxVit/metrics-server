@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
+	chimiddleware "github.com/go-chi/chi/v5/middleware"
 
 	"github.com/AnxVit/metrics-server/internal/handler/middleware"
 	models "github.com/AnxVit/metrics-server/internal/model"
@@ -30,10 +31,13 @@ func NewHandler(service iService) *Handler {
 	}
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
+	r.Use(chimiddleware.StripSlashes)
 	r.Route("/", func(r chi.Router) {
 		r.Get("/", h.handleGetAll)
-		r.Get("/value/{type}/{name}", h.handleGetMetric)
-		r.Post("/update/{type}/{name}/{value}", h.handlePostMetric)
+		r.Post("/value", h.handleGetMetric)
+		r.Post("/update", h.handlePostMetric)
+		r.Get("/value/{type}/{name}", h.handleGetMetricParameters)
+		r.Post("/update/{type}/{name}/{value}", h.handlePostMetricParameters)
 	})
 
 	h.Router = r
@@ -91,6 +95,35 @@ func (h *Handler) handleGetAll(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleGetMetric(w http.ResponseWriter, r *http.Request) {
+	var req models.Metrics
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		http.Error(w, "bad request format", 400)
+		return
+	}
+	if req.MType == "" || req.ID == "" {
+		http.Error(w, "bad request values", 400)
+		return
+	}
+
+	metric, err := h.service.GetMetric(req.MType, req.ID)
+	if err != nil || metric == nil {
+		http.Error(w, "", http.StatusNotFound)
+		return
+	}
+
+	resp, err := json.Marshal(metric)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write(resp)
+}
+
+func (h *Handler) handleGetMetricParameters(w http.ResponseWriter, r *http.Request) {
 	metricType := chi.URLParam(r, "type")
 	metricName := chi.URLParam(r, "name")
 
@@ -123,9 +156,36 @@ func (h *Handler) handleGetMetric(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusOK)
 	w.Write(resp)
+
 }
 
 func (h *Handler) handlePostMetric(w http.ResponseWriter, r *http.Request) {
+	var req models.Metrics
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		http.Error(w, "bad request format", 400)
+		return
+	}
+	if req.MType == "" || req.ID == "" {
+		http.Error(w, "bad request values", 400)
+		return
+	}
+
+	if req.Delta == nil && req.Value == nil {
+		http.Error(w, "value or delta should set", 400)
+		return
+	}
+
+	if err := h.service.SaveMetric(&req); err != nil {
+		http.Error(w, "", http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(http.StatusOK)
+}
+
+func (h *Handler) handlePostMetricParameters(w http.ResponseWriter, r *http.Request) {
 	metricType := chi.URLParam(r, "type")
 	metricName := chi.URLParam(r, "name")
 	metricValue := chi.URLParam(r, "value")
