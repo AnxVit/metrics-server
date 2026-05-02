@@ -37,6 +37,6 @@ func Test_SendInfo(t *testing.T) {
 		"info": 0.0,
 	}
 
-	err := agent.sendInfo(info, 1)
+	err := agent.sendAllInfo(info, 1)
 	require.NoError(t, err)
 }

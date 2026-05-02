@@ -31,6 +31,7 @@ func NewHandler(service iService) *Handler {
 	}
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
+	r.Use(middleware.GZipMiddleware)
 	r.Use(chimiddleware.StripSlashes)
 	r.Route("/", func(r chi.Router) {
 		r.Get("/", h.handleGetAll)
