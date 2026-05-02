@@ -9,7 +9,10 @@ import (
 )
 
 type Options struct {
-	Addr string `env:"ADDRESS"`
+	Addr            string `env:"ADDRESS"`
+	StoreInterval   int    `env:"STORE_INTERVAL"`
+	FileStoragePath string `env:"FILE_STORAGE_PATH"`
+	Restore         bool   `env:"RESTORE"`
 }
 
 func parseFlag(opt *Options) {
@@ -23,6 +26,10 @@ func parseFlag(opt *Options) {
 		opt.Addr = s
 		return nil
 	})
+
+	flag.IntVar(&opt.StoreInterval, "i", 300, "store interval")
+	flag.StringVar(&opt.FileStoragePath, "f", "~/tmp_store.txt", "file path for store")
+	flag.BoolVar(&opt.Restore, "r", false, "should load previously saved values from the specified file when starting the server")
 
 	flag.Parse()
 

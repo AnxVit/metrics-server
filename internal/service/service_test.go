@@ -2,6 +2,7 @@ package service
 
 import (
 	"testing"
+	"time"
 
 	models "github.com/AnxVit/metrics-server/internal/model"
 	"github.com/AnxVit/metrics-server/internal/repository"
@@ -60,7 +61,7 @@ func Test_SaveMetric(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			repo := repository.NewMemStorage() // later mock
+			repo := repository.NewMemStorage("", time.Hour, false) // later mock
 			serv := NewService(repo)
 
 			err := serv.SaveMetric(&test.metric)
@@ -74,7 +75,7 @@ func Test_SaveMetric(t *testing.T) {
 }
 
 func Test_GetMetric(t *testing.T) {
-	repo := repository.NewMemStorage() // later mock
+	repo := repository.NewMemStorage("", time.Hour, false) // later mock
 	repo.SaveCounter("counter1", 0)
 	repo.SaveGauge("gauge1", 0.0)
 	tests := []struct {

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	models "github.com/AnxVit/metrics-server/internal/model"
 	"github.com/AnxVit/metrics-server/internal/repository"
@@ -56,7 +57,7 @@ func Test_PostMetric(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			repo := repository.NewMemStorage() // later mock
+			repo := repository.NewMemStorage("", time.Hour, false) // later mock
 			serv := service.NewService(repo)
 
 			h := NewHandler(serv)
@@ -78,7 +79,7 @@ func Test_PostMetric(t *testing.T) {
 }
 
 func Test_GetMetric(t *testing.T) {
-	repo := repository.NewMemStorage() // later mock
+	repo := repository.NewMemStorage("", time.Hour, false) // later mock
 	serv := service.NewService(repo)
 	serv.SaveMetric(&models.Metrics{
 		ID:    "someMetric",
@@ -184,7 +185,7 @@ func Test_PostMetricParams(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			repo := repository.NewMemStorage() // later mock
+			repo := repository.NewMemStorage("", time.Hour, false) // later mock
 			serv := service.NewService(repo)
 
 			h := NewHandler(serv)
@@ -202,7 +203,7 @@ func Test_PostMetricParams(t *testing.T) {
 }
 
 func Test_GetParameters(t *testing.T) {
-	repo := repository.NewMemStorage() // later mock
+	repo := repository.NewMemStorage("", time.Hour, false) // later mock
 	serv := service.NewService(repo)
 	serv.SaveMetric(&models.Metrics{
 		ID:    "someMetric",

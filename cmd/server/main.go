@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/AnxVit/metrics-server/internal/handler"
 	"github.com/AnxVit/metrics-server/internal/logger"
@@ -16,7 +17,9 @@ func main() {
 
 	logger.Initialize("INFO") // tmp: to cfg
 
-	repo := repository.NewMemStorage()
+	repo := repository.NewMemStorage(
+		opt.FileStoragePath, time.Duration(opt.StoreInterval)*time.Second, opt.Restore,
+	)
 
 	service := service.NewService(repo)
 
