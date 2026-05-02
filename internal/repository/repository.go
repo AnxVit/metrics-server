@@ -35,17 +35,25 @@ func NewMemStorage(filePath string, updateDuration time.Duration, restore bool) 
 		storage.restoreData()
 	}
 
-	go storage.worker()
+	if storage.updateDuration > 0 {
+		go storage.worker()
+	}
 
 	return storage
 }
 
 func (m *MemStorage) SaveGauge(name string, value float64) {
 	m.gaugeMetrics[name] = value
+	if m.updateDuration == 0 {
+		m.saveMetricsToFile(m.getAllMetrics())
+	}
 }
 
 func (m *MemStorage) SaveCounter(name string, value int64) {
 	m.counterMetrics[name] += value
+	if m.updateDuration == 0 {
+		m.saveMetricsToFile(m.getAllMetrics())
+	}
 }
 
 func (m *MemStorage) GetGauge(name string) (float64, bool) {
@@ -72,6 +80,28 @@ func (m *MemStorage) GetAll() map[string]map[string]interface{} {
 	}
 
 	return values
+}
+
+func (m *MemStorage) getAllMetrics() []models.Metrics {
+	var allMetrics []models.Metrics
+
+	for name, value := range m.gaugeMetrics {
+		allMetrics = append(allMetrics, models.Metrics{
+			ID:    name,
+			MType: "gauge",
+			Value: &value,
+		})
+	}
+
+	for name, value := range m.counterMetrics {
+		allMetrics = append(allMetrics, models.Metrics{
+			ID:    name,
+			MType: "counter",
+			Delta: &value,
+		})
+	}
+
+	return allMetrics
 }
 
 func (m *MemStorage) restoreData() {
@@ -105,45 +135,34 @@ func (m *MemStorage) restoreData() {
 	logger.Log.Info("Successfuly load data from file", zap.String("file", m.storePath))
 }
 
+func (m *MemStorage) saveMetricsToFile(metrics []models.Metrics) {
+	file, err := os.OpenFile(m.storePath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0666)
+	if err != nil {
+		logger.Log.Warn("Couldn't open file", zap.String("file", m.storePath), zap.Error(err))
+		return
+	}
+
+	bytesMetrics, err := json.Marshal(metrics)
+	if err != nil {
+		logger.Log.Warn("Couldn't marshal array metrics")
+		return
+	}
+
+	_, err = file.Write(bytesMetrics)
+	if err != nil {
+		logger.Log.Warn("Couldn't write in file", zap.String("file", m.storePath))
+		return
+	}
+	file.WriteString("\n")
+
+	file.Close()
+}
+
 func (m *MemStorage) worker() { // add ctx for shutdown
 	for {
 		time.Sleep(m.updateDuration)
 
-		var allMetrics []models.Metrics
-
-		for name, value := range m.gaugeMetrics {
-			allMetrics = append(allMetrics, models.Metrics{
-				ID:    name,
-				MType: "gauge",
-				Value: &value,
-			})
-		}
-
-		for name, value := range m.counterMetrics {
-			allMetrics = append(allMetrics, models.Metrics{
-				ID:    name,
-				MType: "counter",
-				Delta: &value,
-			})
-		}
-
-		file, err := os.OpenFile(m.storePath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0666)
-		if err != nil {
-			logger.Log.Fatal("Couldn't open file", zap.String("file", m.storePath), zap.Error(err))
-		}
-
-		bytesMetrics, err := json.Marshal(allMetrics)
-		if err != nil {
-			logger.Log.Fatal("Couldn't marshal array metrics")
-		}
-
-		_, err = file.Write(bytesMetrics)
-		if err != nil {
-			logger.Log.Fatal("Couldn't write in file", zap.String("file", m.storePath))
-		}
-		file.WriteString("\n")
-
-		file.Close()
+		m.saveMetricsToFile(m.getAllMetrics())
 
 		logger.Log.Info("Successfuly wrtie data to file", zap.String("file", m.storePath))
 	}
