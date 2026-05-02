@@ -5,12 +5,12 @@ import (
 )
 
 func main() {
-	var opt options
+	var opt Options
 	parseFlag(&opt)
 	client := agent.NewAgent(
-		opt.addr,
-		opt.reportInterval,
-		opt.pollInterval,
+		opt.Addr,
+		opt.ReportInterval,
+		opt.PollInterval,
 	)
 
 	client.Work()
