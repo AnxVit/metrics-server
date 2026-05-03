@@ -2,11 +2,13 @@ package agent
 
 import (
 	"compress/gzip"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	models "github.com/AnxVit/metrics-server/internal/model"
 	"github.com/stretchr/testify/require"
@@ -19,7 +21,7 @@ func Test_SendInfo(t *testing.T) {
 			return
 		}
 
-		if r.URL.Path != "/updates" {
+		if r.URL.Path != "/update" {
 			http.NotFound(w, r)
 			return
 		}
@@ -42,13 +44,13 @@ func Test_SendInfo(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	agent := NewAgent(ts.URL, "", 10, 2)
+	ctx := context.Background()
 
-	info := map[string]float64{
-		"info": 0.0,
-	}
+	timeoutCtx, cancel := context.WithTimeout(ctx, 1000*time.Millisecond)
+	defer cancel()
+	agent := NewAgent(timeoutCtx, ts.URL, "", 10, 2, 1)
 
-	err := agent.sendAllInfo(info, 1)
+	err := agent.Work(timeoutCtx)
 	require.NoError(t, err)
 }
 
