@@ -41,7 +41,41 @@ func HashMiddleware(key string) func(h http.Handler) http.Handler {
 
 			r.Body = io.NopCloser(bytes.NewReader(body))
 
-			h.ServeHTTP(w, r)
+			rw := &hashResponseWriter{
+				ResponseWriter: w,
+				body:           bytes.NewBuffer(nil),
+			}
+
+			h.ServeHTTP(rw, r)
+
+			if rw.body.Len() > 0 {
+				responseHash, err := util.HashByKey(rw.body.Bytes(), key)
+				if err != nil {
+					logger.Log.Warn("Failed to hash body", zap.Error(err))
+					http.Error(w, "", http.StatusInternalServerError)
+					return
+				}
+				rw.Header().Set("HashSHA256", responseHash)
+			}
+
+			rw.ResponseWriter.Write(rw.body.Bytes())
 		})
 	}
+}
+
+type hashResponseWriter struct {
+	http.ResponseWriter
+	body *bytes.Buffer
+}
+
+func (w *hashResponseWriter) Write(b []byte) (int, error) {
+	return w.body.Write(b)
+}
+
+func (w *hashResponseWriter) WriteHeader(statusCode int) {
+	w.ResponseWriter.WriteHeader(statusCode)
+}
+
+func (w *hashResponseWriter) Header() http.Header {
+	return w.ResponseWriter.Header()
 }

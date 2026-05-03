@@ -3,9 +3,6 @@ package agent
 import (
 	"bytes"
 	"compress/gzip"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -188,11 +185,10 @@ func (a *Agent) sendInfo(client *resty.Client, models []models.Metrics) error {
 
 	var hashData string
 	if a.key != "" {
-		hmac := hmac.New(sha256.New, []byte(a.key))
-		if _, err := hmac.Write(jsonBody); err != nil {
-			return fmt.Errorf("failed to compute HMAC: %w", err)
+		hashData, err = util.HashByKey(jsonBody, a.key)
+		if err != nil {
+			return err
 		}
-		hashData = hex.EncodeToString(hmac.Sum(nil))
 	}
 
 	jsonBody, err = compress(jsonBody)
