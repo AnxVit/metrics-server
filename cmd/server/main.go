@@ -30,22 +30,35 @@ func main() {
 
 	migrations.Migrate(opt.DatabaseDSN, commandUP, []string{})
 
-	conn, err := pgxpool.New(ctx, opt.DatabaseDSN)
+	pool, err := pgxpool.New(ctx, opt.DatabaseDSN)
 	if err != nil {
 		logger.Log.Warn("Couldn't connect to database", zap.Error(err))
 	} else {
-		defer conn.Close()
+		conn, err := pool.Acquire(ctx)
+		if err != nil {
+			logger.Log.Warn("Couldn't connect to database", zap.Error(err))
+			pool.Close()
+			pool = nil
+		} else {
+			conn.Release()
+		}
 	}
+
+	defer func() {
+		if pool != nil {
+			pool.Close()
+		}
+	}()
 
 	repoCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	repo := repository.NewRepository(
-		repoCtx, conn, opt.FileStoragePath, time.Duration(opt.StoreInterval)*time.Second, opt.Restore,
+		repoCtx, pool, opt.FileStoragePath, time.Duration(opt.StoreInterval)*time.Second, opt.Restore,
 	)
 
 	service := service.NewService(repo)
 
-	handler := handler.NewHandler(service, conn)
+	handler := handler.NewHandler(service, pool)
 
 	logger.Log.Info(fmt.Sprintf("Listen %s", opt.Addr))
 
