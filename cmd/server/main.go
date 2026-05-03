@@ -29,7 +29,7 @@ func main() {
 
 	conn, err := pgx.Connect(context.Background(), opt.DatabaseDSN)
 	if err != nil {
-		logger.Log.Warn(fmt.Sprintf("Couldn't connect to database"), zap.Error(err))
+		logger.Log.Warn("Couldn't connect to database", zap.Error(err))
 	}
 	defer conn.Close(context.Background())
 
