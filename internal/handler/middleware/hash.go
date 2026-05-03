@@ -20,8 +20,7 @@ func HashMiddleware(key string) func(h http.Handler) http.Handler {
 
 			hash := r.Header.Get("HashSHA256")
 			if hash == "" {
-				logger.Log.Info("Missing hash header")
-				http.Error(w, "Missing hash header", http.StatusBadRequest)
+				h.ServeHTTP(w, r)
 				return
 			}
 
