@@ -1,4 +1,4 @@
-package main
+package migrations
 
 import (
 	"context"
@@ -33,6 +33,15 @@ func main() {
 		migrationDir = args[2]
 	}
 
+	arguments := []string{}
+	if len(args) > 3 {
+		arguments = append(arguments, args[3:]...)
+	}
+
+	Migrate(dbstring, command, migrationDir, arguments)
+}
+
+func Migrate(dbstring, command, migrationDir string, arguments []string) {
 	db, err := goose.OpenDBWithDriver("postgres", dbstring)
 	if err != nil {
 		log.Fatalf("goose: failed to open DB: %v", err)
@@ -43,11 +52,6 @@ func main() {
 			log.Fatalf("goose: failed to close DB: %v", err)
 		}
 	}()
-
-	arguments := []string{}
-	if len(args) > 3 {
-		arguments = append(arguments, args[3:]...)
-	}
 
 	ctx := context.Background()
 	if err := goose.RunContext(ctx, command, db, migrationDir, arguments...); err != nil {

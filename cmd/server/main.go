@@ -13,6 +13,12 @@ import (
 	"github.com/AnxVit/metrics-server/internal/logger"
 	"github.com/AnxVit/metrics-server/internal/repository"
 	"github.com/AnxVit/metrics-server/internal/service"
+	"github.com/AnxVit/metrics-server/migrations"
+)
+
+const (
+	commandUP    = "up"
+	migrationDir = "./migrations/pgmigrations"
 )
 
 func main() {
@@ -22,6 +28,9 @@ func main() {
 	logger.Initialize("INFO") // tmp: to cfg
 
 	ctx := context.Background()
+
+	migrations.Migrate(opt.DatabaseDSN, commandUP, migrationDir, []string{})
+
 	conn, err := pgx.Connect(ctx, opt.DatabaseDSN)
 	if err != nil {
 		logger.Log.Warn("Couldn't connect to database", zap.Error(err))
