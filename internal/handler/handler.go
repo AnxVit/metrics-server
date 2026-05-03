@@ -32,7 +32,7 @@ type Handler struct {
 	postgresConn *pgxpool.Pool
 }
 
-func NewHandler(service iService, conn *pgxpool.Pool) *Handler {
+func NewHandler(service iService, conn *pgxpool.Pool, key string) *Handler {
 	h := &Handler{
 		service:      service,
 		postgresConn: conn,
@@ -41,6 +41,7 @@ func NewHandler(service iService, conn *pgxpool.Pool) *Handler {
 	r.Use(middleware.Logger)
 	r.Use(middleware.GZipMiddleware)
 	r.Use(chimiddleware.StripSlashes)
+	r.Use(middleware.HashMiddleware(key))
 	r.Route("/", func(r chi.Router) {
 		r.Get("/", h.handleGetAll)
 		r.Post("/value", h.handleGetMetric)

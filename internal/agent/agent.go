@@ -3,6 +3,9 @@ package agent
 import (
 	"bytes"
 	"compress/gzip"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,6 +20,7 @@ import (
 	"github.com/AnxVit/metrics-server/internal/logger"
 	models "github.com/AnxVit/metrics-server/internal/model"
 	"github.com/AnxVit/metrics-server/internal/util"
+	"github.com/avast/retry-go/v5"
 	"github.com/go-resty/resty/v2"
 	"go.uber.org/zap"
 )
@@ -26,19 +30,43 @@ type Request struct {
 }
 
 type Agent struct {
-	client *http.Client
+	client  *http.Client
+	retrier *retry.Retrier
 
 	addr           string
+	key            string
 	reportInterval time.Duration
 	pollInterval   time.Duration
 }
 
-func NewAgent(addr string, reportInter, pollInter int) *Agent {
+func NewAgent(addr, key string, reportInter, pollInter int) *Agent {
+	retrier := util.NewRetryer(
+		3,
+		time.Duration(1)*time.Second,
+		time.Duration(5)*time.Second,
+		func(err error) bool {
+			var netErr net.Error
+			if errors.As(err, &netErr) {
+				return true
+			}
+
+			if httpErr, ok := err.(interface{ StatusCode() int }); ok {
+				code := httpErr.StatusCode()
+				return code == 429 || code == 408 || (code >= 500 && code < 600)
+			}
+
+			return false
+		},
+	)
+
 	return &Agent{
 		client: &http.Client{
 			Timeout: 100 * time.Millisecond,
 		},
+		retrier: retrier,
+
 		addr:           addr,
+		key:            key,
 		reportInterval: time.Duration(reportInter) * time.Second,
 		pollInterval:   time.Duration(pollInter) * time.Second,
 	}
@@ -158,36 +186,31 @@ func (a *Agent) sendInfo(client *resty.Client, models []models.Metrics) error {
 		return err
 	}
 
+	var hashData string
+	if a.key != "" {
+		hmac := hmac.New(sha256.New, []byte(a.key))
+		if _, err := hmac.Write(jsonBody); err != nil {
+			return fmt.Errorf("failed to compute HMAC: %w", err)
+		}
+		hashData = hex.EncodeToString(hmac.Sum(nil))
+	}
+
 	jsonBody, err = compress(jsonBody)
 	if err != nil {
 		return err
 	}
 
-	retrier := util.NewRetryer(
-		3,
-		time.Duration(1)*time.Second,
-		time.Duration(5)*time.Second,
-		func(err error) bool {
-			var netErr net.Error
-			if errors.As(err, &netErr) {
-				return true
-			}
-
-			if httpErr, ok := err.(interface{ StatusCode() int }); ok {
-				code := httpErr.StatusCode()
-				return code == 429 || code == 408 || (code >= 500 && code < 600)
-			}
-
-			return false
-		},
-	)
-
-	return retrier.Do(func() error {
-		resp, err := client.R().
+	return a.retrier.Do(func() error {
+		req := client.R().
 			SetHeader("Content-Type", "application/json").
-			SetHeader("Content-Encoding", "gzip").
+			SetHeader("Content-Encoding", "gzip")
+		if a.key != "" {
+			req.SetHeader("HashSHA256", hashData)
+		}
+		resp, err := req.
 			SetBody(jsonBody).
 			Post(a.addr + "/updates")
+
 		if err != nil {
 			return err
 		}

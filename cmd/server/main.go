@@ -58,7 +58,7 @@ func main() {
 
 	service := service.NewService(repo)
 
-	handler := handler.NewHandler(service, pool)
+	handler := handler.NewHandler(service, pool, opt.Key)
 
 	logger.Log.Info(fmt.Sprintf("Listen %s", opt.Addr))
 

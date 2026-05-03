@@ -12,6 +12,7 @@ type Options struct {
 	Addr           string `env:"ADDRESS"`
 	ReportInterval int    `env:"REPORT_INTERVAL"`
 	PollInterval   int    `env:"POLL_INTERVAL"`
+	Key            string `env:"KEY"`
 }
 
 func parseFlag(opt *Options) {
@@ -28,6 +29,7 @@ func parseFlag(opt *Options) {
 
 	flag.IntVar(&opt.ReportInterval, "r", 10, "report interval")
 	flag.IntVar(&opt.PollInterval, "p", 2, "poll interval")
+	flag.StringVar(&opt.Key, "k", "", "hash key")
 	flag.Parse()
 
 	err := env.Parse(opt)

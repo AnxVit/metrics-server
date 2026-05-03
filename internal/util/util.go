@@ -1,6 +1,9 @@
 package util
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"time"
 
 	"github.com/AnxVit/metrics-server/internal/logger"
@@ -30,4 +33,15 @@ func NewRetryer(
 	}
 
 	return retry.New(options...)
+}
+
+func VerifyHash(jsonBody []byte, hash, key string) bool {
+	hmacHash := hmac.New(sha256.New, []byte(key))
+	if _, err := hmacHash.Write(jsonBody); err != nil {
+		return false
+	}
+
+	hashBody := hex.EncodeToString(hmacHash.Sum(nil))
+
+	return hmac.Equal([]byte(hashBody), []byte(hash))
 }

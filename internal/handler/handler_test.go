@@ -77,7 +77,7 @@ func Test_PostMetric(t *testing.T) {
 			}
 			serv := service.NewService(repo)
 
-			h := NewHandler(serv, nil)
+			h := NewHandler(serv, nil, "")
 
 			data, _ := json.Marshal(test.req)
 
@@ -158,7 +158,7 @@ func Test_GetMetric(t *testing.T) {
 
 			serv := service.NewService(repo)
 
-			h := NewHandler(serv, nil)
+			h := NewHandler(serv, nil, "")
 
 			data, _ := json.Marshal(test.req)
 
@@ -236,7 +236,7 @@ func Test_PostMetricParams(t *testing.T) {
 			}
 			serv := service.NewService(repo)
 
-			h := NewHandler(serv, nil)
+			h := NewHandler(serv, nil, "")
 
 			req := httptest.NewRequest(test.method, test.path, nil)
 			rr := httptest.NewRecorder()
@@ -294,7 +294,7 @@ func Test_GetParameters(t *testing.T) {
 
 			serv := service.NewService(repo)
 
-			h := NewHandler(serv, nil)
+			h := NewHandler(serv, nil, "")
 
 			req := httptest.NewRequest(test.method, test.path, nil)
 			rr := httptest.NewRecorder()
