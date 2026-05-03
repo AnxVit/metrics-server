@@ -8,37 +8,37 @@ import (
 	"go.uber.org/zap"
 )
 
-type responseDate struct {
+type responseData struct {
 	status int
 	size   int
 }
 
 type LogResponseWriter struct {
 	http.ResponseWriter
-	responseDate *responseDate
+	responseData *responseData
 }
 
 func (l *LogResponseWriter) Write(b []byte) (int, error) {
 	size, err := l.ResponseWriter.Write(b)
-	l.responseDate.size = size
+	l.responseData.size = size
 	return size, err
 }
 
 func (l *LogResponseWriter) WriteHeader(statusCode int) {
 	l.ResponseWriter.WriteHeader(statusCode)
-	l.responseDate.status = statusCode
+	l.responseData.status = statusCode
 }
 
 func Logger(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		startedAt := time.Now()
-		responseDate := &responseDate{
+		responseData := &responseData{
 			status: 0,
 			size:   0,
 		}
 		lw := LogResponseWriter{
 			ResponseWriter: w,
-			responseDate:   responseDate,
+			responseData:   responseData,
 		}
 		next.ServeHTTP(&lw, r)
 
@@ -47,9 +47,9 @@ func Logger(next http.Handler) http.Handler {
 		logger.Log.Info("",
 			zap.String("uri", r.RequestURI),
 			zap.String("method", r.Method),
-			zap.Int("status", responseDate.status),
+			zap.Int("status", responseData.status),
 			zap.Duration("duration", duration),
-			zap.Int("size", responseDate.size),
+			zap.Int("size", responseData.size),
 		)
 	})
 }

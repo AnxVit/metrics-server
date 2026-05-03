@@ -84,11 +84,11 @@ func Test_GetMetric(t *testing.T) {
 	ctx := context.Background()
 	repo := repository.NewRepository(ctx, nil, "", time.Hour, false) // later mock
 	serv := service.NewService(repo)
-	serv.SaveMetric(context.Background(), &models.Metrics{
+	serv.SaveMetrics(context.Background(), []*models.Metrics{{
 		ID:    "someMetric",
 		MType: models.Gauge,
 		Value: toPointer(37.0),
-	})
+	}})
 	tests := []struct {
 		name   string
 		method string
@@ -210,11 +210,11 @@ func Test_GetParameters(t *testing.T) {
 	ctx := context.Background()
 	repo := repository.NewRepository(ctx, nil, "", time.Hour, false) // later mock
 	serv := service.NewService(repo)
-	serv.SaveMetric(context.Background(), &models.Metrics{
+	serv.SaveMetrics(context.Background(), []*models.Metrics{{
 		ID:    "someMetric",
 		MType: models.Gauge,
 		Value: toPointer(37.0),
-	})
+	}})
 	tests := []struct {
 		name   string
 		method string

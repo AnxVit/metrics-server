@@ -48,16 +48,15 @@ func NewMemStorage(ctx context.Context, filePath string, updateDuration time.Dur
 	return storage
 }
 
-func (m *MemStorage) SaveGauge(_ context.Context, name string, value float64) error {
-	m.gaugeMetrics[name] = value
-	if m.updateDuration == 0 {
-		return m.saveMetricsToFile(m.getAllMetrics())
+func (m *MemStorage) SaveMetrics(_ context.Context, metrics []*models.Metrics) error {
+	for _, metric := range metrics {
+		switch metric.MType {
+		case typeCounter:
+			m.counterMetrics[metric.ID] += *metric.Delta
+		case typeGauge:
+			m.gaugeMetrics[metric.ID] = *metric.Value
+		}
 	}
-	return nil
-}
-
-func (m *MemStorage) SaveCounter(_ context.Context, name string, value int64) error {
-	m.counterMetrics[name] += value
 	if m.updateDuration == 0 {
 		return m.saveMetricsToFile(m.getAllMetrics())
 	}

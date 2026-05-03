@@ -11,7 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/AnxVit/metrics-server/internal/handler/middleware"
 	models "github.com/AnxVit/metrics-server/internal/model"
@@ -19,7 +19,7 @@ import (
 )
 
 type iService interface {
-	SaveMetric(ctx context.Context, metric *models.Metrics) error
+	SaveMetrics(ctx context.Context, metric []*models.Metrics) error
 	GetMetric(ctx context.Context, metricType, name string) (*models.Metrics, error)
 	GetAll(ctx context.Context) ([]models.Metrics, error)
 }
@@ -28,10 +28,10 @@ type Handler struct {
 	chi.Router
 
 	service      iService
-	postgresConn *pgx.Conn
+	postgresConn *pgxpool.Pool
 }
 
-func NewHandler(service iService, conn *pgx.Conn) *Handler {
+func NewHandler(service iService, conn *pgxpool.Pool) *Handler {
 	h := &Handler{
 		service:      service,
 		postgresConn: conn,
@@ -190,29 +190,24 @@ func (h *Handler) handleGetMetricParameters(w http.ResponseWriter, r *http.Reque
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusOK)
 	w.Write(resp)
-
 }
 
 func (h *Handler) handlePostMetric(w http.ResponseWriter, r *http.Request) {
-	var req models.Metrics
+	var req UpdateRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		http.Error(w, "bad request format", 400)
 		return
 	}
-	if req.MType == "" || req.ID == "" {
-		http.Error(w, "bad request values", 400)
-		return
-	}
 
-	if req.Delta == nil && req.Value == nil {
-		http.Error(w, "value or delta should set", 400)
+	if err := req.validate(); err != nil {
+		http.Error(w, err.Error(), 400)
 		return
 	}
 
 	ctx := r.Context()
 
-	if err := h.service.SaveMetric(ctx, &req); err != nil {
+	if err := h.service.SaveMetrics(ctx, req.Metrics); err != nil {
 		http.Error(w, "", http.StatusInternalServerError)
 		return
 	}
@@ -248,7 +243,7 @@ func (h *Handler) handlePostMetricParameters(w http.ResponseWriter, r *http.Requ
 
 	ctx := r.Context()
 
-	if err := h.service.SaveMetric(ctx, metric); err != nil {
+	if err := h.service.SaveMetrics(ctx, []*models.Metrics{metric}); err != nil {
 		if errors.Is(err, service.ErrBadMetricType) {
 			http.Error(w, "bad metric type", http.StatusBadRequest)
 			return

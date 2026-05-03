@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 
 	"github.com/AnxVit/metrics-server/internal/handler"
@@ -30,11 +30,11 @@ func main() {
 
 	migrations.Migrate(opt.DatabaseDSN, commandUP, []string{})
 
-	conn, err := pgx.Connect(ctx, opt.DatabaseDSN)
+	conn, err := pgxpool.New(ctx, opt.DatabaseDSN)
 	if err != nil {
 		logger.Log.Warn("Couldn't connect to database", zap.Error(err))
 	} else {
-		defer conn.Close(ctx)
+		defer conn.Close()
 	}
 
 	repoCtx, cancel := context.WithCancel(ctx)

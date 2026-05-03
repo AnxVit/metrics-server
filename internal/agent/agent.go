@@ -13,15 +13,13 @@ import (
 	"time"
 
 	"github.com/AnxVit/metrics-server/internal/logger"
+	models "github.com/AnxVit/metrics-server/internal/model"
 	"github.com/go-resty/resty/v2"
 	"go.uber.org/zap"
 )
 
 type Request struct {
-	ID    string   `json:"id"`
-	MType string   `json:"type"`
-	Delta *int64   `json:"delta,omitempty"`
-	Value *float64 `json:"value,omitempty"`
+	Metrics []models.Metrics
 }
 
 type Agent struct {
@@ -120,34 +118,39 @@ func (a *Agent) getRuntimeInfo() map[string]float64 {
 func (a *Agent) sendAllInfo(info map[string]float64, poolCount int64) error {
 	client := resty.New()
 
+	metrics := make([]models.Metrics, 0)
+
 	for name, value := range info {
-		req := &Request{
+		metrics = append(metrics, models.Metrics{
 			ID:    name,
 			MType: "gauge",
 			Value: &value,
-		}
-
-		if err := a.sendInfo(client, req); err != nil {
-			logger.Log.Warn("Couldn't send info to main service", zap.Error(err))
-		}
+		})
 	}
 
-	req := &Request{
-		ID:    "PollCount",
-		MType: "counter",
-		Delta: &poolCount,
-	}
-
-	if err := a.sendInfo(client, req); err != nil {
+	if err := a.sendInfo(client, metrics); err != nil {
 		logger.Log.Warn("Couldn't send info to main service", zap.Error(err))
+	}
+
+	metrics = []models.Metrics{
+		{
+			ID:    "PollCount",
+			MType: "counter",
+			Delta: &poolCount,
+		},
+	}
+
+	if err := a.sendInfo(client, metrics); err != nil {
+		logger.Log.Warn("Couldn't send info to main service", zap.Error(err))
+		return err
 	}
 
 	log.Println("Successfully send")
 	return nil
 }
 
-func (a *Agent) sendInfo(client *resty.Client, req *Request) error {
-	jsonBody, err := json.Marshal(req)
+func (a *Agent) sendInfo(client *resty.Client, models []models.Metrics) error {
+	jsonBody, err := json.Marshal(models)
 	if err != nil {
 		return err
 	}
@@ -163,7 +166,7 @@ func (a *Agent) sendInfo(client *resty.Client, req *Request) error {
 		SetBody(jsonBody).
 		Post(a.addr + "/update")
 	if err != nil || resp.StatusCode() != 200 {
-		return fmt.Errorf("bad answer: %d", resp.StatusCode())
+		return fmt.Errorf("bad answer: %s", resp.String())
 	}
 	return nil
 }

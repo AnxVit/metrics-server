@@ -66,7 +66,7 @@ func Test_SaveMetric(t *testing.T) {
 			repo := repository.NewRepository(ctx, nil, "", time.Hour, false) // later mock
 			serv := NewService(repo)
 
-			err := serv.SaveMetric(ctx, &test.metric)
+			err := serv.SaveMetrics(ctx, []*models.Metrics{&test.metric})
 			if test.errorMsg == "" {
 				require.NoError(t, err)
 			} else {
@@ -79,8 +79,18 @@ func Test_SaveMetric(t *testing.T) {
 func Test_GetMetric(t *testing.T) {
 	ctx := context.Background()
 	repo := repository.NewRepository(ctx, nil, "", time.Hour, false) // later mock
-	repo.SaveCounter(ctx, "counter1", 0)
-	repo.SaveGauge(ctx, "gauge1", 0.0)
+	repo.SaveMetrics(ctx, []*models.Metrics{
+		{
+			ID:    "counter1",
+			MType: "counter",
+			Delta: toPointer(int64(0)),
+		},
+		{
+			ID:    "gauge1",
+			MType: "gauge",
+			Value: toPointer(float64(0.0)),
+		},
+	})
 	tests := []struct {
 		name     string
 		input    models.Metrics
