@@ -11,11 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const (
-	typeGauge   = "gauge"
-	typeCounter = "counter"
-)
-
 type Storage interface {
 	SaveMetrics(ctx context.Context, metrics []*models.Metrics) error
 	GetGauge(ctx context.Context, name string) (float64, error)
