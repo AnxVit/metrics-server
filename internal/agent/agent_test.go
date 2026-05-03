@@ -19,7 +19,7 @@ func Test_SendInfo(t *testing.T) {
 			return
 		}
 
-		if r.URL.Path != "/update" {
+		if r.URL.Path != "/updates" {
 			http.NotFound(w, r)
 			return
 		}
