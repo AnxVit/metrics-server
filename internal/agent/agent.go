@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"math/rand"
+	"net"
 	"net/http"
 	"runtime"
 	"sync"
@@ -14,6 +16,7 @@ import (
 
 	"github.com/AnxVit/metrics-server/internal/logger"
 	models "github.com/AnxVit/metrics-server/internal/model"
+	"github.com/AnxVit/metrics-server/internal/util"
 	"github.com/go-resty/resty/v2"
 	"go.uber.org/zap"
 )
@@ -155,23 +158,50 @@ func (a *Agent) sendInfo(client *resty.Client, models []models.Metrics) error {
 		return err
 	}
 
-	jsonBody, err = Compress(jsonBody)
+	jsonBody, err = compress(jsonBody)
 	if err != nil {
 		return err
 	}
 
-	resp, err := client.R().
-		SetHeader("Content-Type", "application/json").
-		SetHeader("Content-Encoding", "gzip").
-		SetBody(jsonBody).
-		Post(a.addr + "/updates")
-	if err != nil || resp.StatusCode() != 200 {
-		return fmt.Errorf("bad answer: %s", resp.String())
-	}
-	return nil
+	retrier := util.NewRetryer(
+		3,
+		time.Duration(1)*time.Second,
+		time.Duration(5)*time.Second,
+		func(err error) bool {
+			var netErr net.Error
+			if errors.As(err, &netErr) {
+				return true
+			}
+
+			if httpErr, ok := err.(interface{ StatusCode() int }); ok {
+				code := httpErr.StatusCode()
+				return code == 429 || code == 408 || (code >= 500 && code < 600)
+			}
+
+			return false
+		},
+	)
+
+	return retrier.Do(func() error {
+		resp, err := client.R().
+			SetHeader("Content-Type", "application/json").
+			SetHeader("Content-Encoding", "gzip").
+			SetBody(jsonBody).
+			Post(a.addr + "/updates")
+		if err != nil {
+			return err
+		}
+		if resp.StatusCode() != 200 {
+			return &CodeError{
+				err:  resp.String(),
+				code: resp.StatusCode(),
+			}
+		}
+		return nil
+	})
 }
 
-func Compress(data []byte) ([]byte, error) {
+func compress(data []byte) ([]byte, error) {
 	var b bytes.Buffer
 
 	writer := gzip.NewWriter(&b)
@@ -186,4 +216,17 @@ func Compress(data []byte) ([]byte, error) {
 		return nil, fmt.Errorf("failed compress data: %v", err)
 	}
 	return b.Bytes(), nil
+}
+
+type CodeError struct {
+	err  string
+	code int
+}
+
+func (c *CodeError) Error() string {
+	return fmt.Sprintf("%s (%d)", c.err, c.code)
+}
+
+func (c *CodeError) StatusCode() int {
+	return c.code
 }
