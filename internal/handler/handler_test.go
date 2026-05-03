@@ -60,7 +60,7 @@ func Test_PostMetric(t *testing.T) {
 			repo := repository.NewMemStorage("", time.Hour, false) // later mock
 			serv := service.NewService(repo)
 
-			h := NewHandler(serv)
+			h := NewHandler(serv, nil)
 
 			data, _ := json.Marshal(test.req)
 
@@ -127,7 +127,7 @@ func Test_GetMetric(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 
-			h := NewHandler(serv)
+			h := NewHandler(serv, nil)
 
 			data, _ := json.Marshal(test.req)
 
@@ -188,7 +188,7 @@ func Test_PostMetricParams(t *testing.T) {
 			repo := repository.NewMemStorage("", time.Hour, false) // later mock
 			serv := service.NewService(repo)
 
-			h := NewHandler(serv)
+			h := NewHandler(serv, nil)
 
 			req := httptest.NewRequest(test.method, test.path, nil)
 			rr := httptest.NewRecorder()
@@ -238,7 +238,7 @@ func Test_GetParameters(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 
-			h := NewHandler(serv)
+			h := NewHandler(serv, nil)
 
 			req := httptest.NewRequest(test.method, test.path, nil)
 			rr := httptest.NewRecorder()

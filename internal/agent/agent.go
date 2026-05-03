@@ -12,7 +12,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/AnxVit/metrics-server/internal/logger"
 	"github.com/go-resty/resty/v2"
+	"go.uber.org/zap"
 )
 
 type Request struct {
@@ -125,7 +127,9 @@ func (a *Agent) sendAllInfo(info map[string]float64, poolCount int64) error {
 			Value: &value,
 		}
 
-		a.sendInfo(client, req)
+		if err := a.sendInfo(client, req); err != nil {
+			logger.Log.Warn("Couldn't send info to main service", zap.Error(err))
+		}
 	}
 
 	req := &Request{
@@ -134,7 +138,9 @@ func (a *Agent) sendAllInfo(info map[string]float64, poolCount int64) error {
 		Delta: &poolCount,
 	}
 
-	a.sendInfo(client, req)
+	if err := a.sendInfo(client, req); err != nil {
+		logger.Log.Warn("Couldn't send info to main service", zap.Error(err))
+	}
 
 	log.Println("Successfully send")
 	return nil
