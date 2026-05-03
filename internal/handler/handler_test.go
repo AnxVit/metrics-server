@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -57,7 +58,8 @@ func Test_PostMetric(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			repo := repository.NewMemStorage("", time.Hour, false) // later mock
+			ctx := context.Background()
+			repo := repository.NewRepository(ctx, nil, "", time.Hour, false) // later mock
 			serv := service.NewService(repo)
 
 			h := NewHandler(serv, nil)
@@ -79,9 +81,10 @@ func Test_PostMetric(t *testing.T) {
 }
 
 func Test_GetMetric(t *testing.T) {
-	repo := repository.NewMemStorage("", time.Hour, false) // later mock
+	ctx := context.Background()
+	repo := repository.NewRepository(ctx, nil, "", time.Hour, false) // later mock
 	serv := service.NewService(repo)
-	serv.SaveMetric(&models.Metrics{
+	serv.SaveMetric(context.Background(), &models.Metrics{
 		ID:    "someMetric",
 		MType: models.Gauge,
 		Value: toPointer(37.0),
@@ -185,7 +188,8 @@ func Test_PostMetricParams(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			repo := repository.NewMemStorage("", time.Hour, false) // later mock
+			ctx := context.Background()
+			repo := repository.NewRepository(ctx, nil, "", time.Hour, false) // later mock
 			serv := service.NewService(repo)
 
 			h := NewHandler(serv, nil)
@@ -203,9 +207,10 @@ func Test_PostMetricParams(t *testing.T) {
 }
 
 func Test_GetParameters(t *testing.T) {
-	repo := repository.NewMemStorage("", time.Hour, false) // later mock
+	ctx := context.Background()
+	repo := repository.NewRepository(ctx, nil, "", time.Hour, false) // later mock
 	serv := service.NewService(repo)
-	serv.SaveMetric(&models.Metrics{
+	serv.SaveMetric(context.Background(), &models.Metrics{
 		ID:    "someMetric",
 		MType: models.Gauge,
 		Value: toPointer(37.0),

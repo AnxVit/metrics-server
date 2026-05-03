@@ -1,20 +1,29 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"strings"
 
+	"github.com/AnxVit/metrics-server/internal/logger"
 	models "github.com/AnxVit/metrics-server/internal/model"
+	repoErrors "github.com/AnxVit/metrics-server/internal/repository/errors"
+	"go.uber.org/zap"
+)
+
+var (
+	ErrBadMetricType  = errors.New("bad metric type")
+	ErrBadMetricValue = errors.New("bad metric value")
 )
 
 type iRepo interface {
-	SaveGauge(name string, value float64)
-	SaveCounter(name string, value int64)
+	SaveGauge(ctx context.Context, name string, value float64) error
+	SaveCounter(ctx context.Context, name string, value int64) error
 
-	GetGauge(name string) (float64, bool)
-	GetCounter(name string) (int64, bool)
+	GetGauge(ctx context.Context, name string) (float64, error)
+	GetCounter(ctx context.Context, name string) (int64, error)
 
-	GetAll() map[string]map[string]interface{}
+	GetAll(ctx context.Context) (map[string]map[string]interface{}, error)
 }
 
 type Service struct {
@@ -27,60 +36,82 @@ func NewService(repo iRepo) *Service {
 	}
 }
 
-func (s *Service) SaveMetric(metric *models.Metrics) error {
+func (s *Service) SaveMetric(ctx context.Context, metric *models.Metrics) error {
 	metricType := strings.TrimSpace(strings.ToLower(metric.MType))
+	var err error
 
 	switch metricType {
 	case models.Gauge:
 		if metric.Value == nil {
-			return errors.New("bad gauge type")
+			return ErrBadMetricValue
 		}
-		s.repo.SaveGauge(metric.ID, *metric.Value)
+		err = s.repo.SaveGauge(ctx, metric.ID, *metric.Value)
 	case models.Counter:
 		if metric.Delta == nil {
-			return errors.New("bad counter type")
+			return ErrBadMetricValue
 		}
-		s.repo.SaveCounter(metric.ID, *metric.Delta)
+		err = s.repo.SaveCounter(ctx, metric.ID, *metric.Delta)
 	default:
-		return errors.New("bad metric type")
+		return ErrBadMetricType
+	}
+
+	if err != nil {
+		logger.Log.Warn("Couldn't save metric", zap.Error(err))
 	}
 
 	return nil
 }
 
-func (s *Service) GetMetric(metricType, name string) (*models.Metrics, error) {
+func (s *Service) GetMetric(ctx context.Context, metricType, name string) (*models.Metrics, error) {
 	metricType = strings.TrimSpace(strings.ToLower(metricType))
 
 	switch metricType {
 	case models.Gauge:
-		value, ok := s.repo.GetGauge(name)
-		if ok {
-			return &models.Metrics{
-				ID:    name,
-				MType: models.Gauge,
-				Value: &value,
-			}, nil
+		value, err := s.repo.GetGauge(ctx, name)
+		if err != nil {
+			if !errors.Is(err, repoErrors.ErrorEmptyResult) {
+				logger.Log.Warn("Couldn't get metric", zap.Error(err))
+				return nil, err
+			}
+			return nil, nil
 		}
-		return nil, nil
+
+		return &models.Metrics{
+			ID:    name,
+			MType: models.Gauge,
+			Value: &value,
+		}, nil
 	case models.Counter:
-		value, ok := s.repo.GetCounter(name)
-		if ok {
-			return &models.Metrics{
-				ID:    name,
-				MType: models.Counter,
-				Delta: &value,
-			}, nil
+		value, err := s.repo.GetCounter(ctx, name)
+		if err != nil {
+			if !errors.Is(err, repoErrors.ErrorEmptyResult) {
+				logger.Log.Warn("Couldn't get metric", zap.Error(err))
+				return nil, err
+			}
+			return nil, nil
 		}
-		return nil, nil
+
+		return &models.Metrics{
+			ID:    name,
+			MType: models.Counter,
+			Delta: &value,
+		}, nil
 	}
 
-	return nil, errors.New("bad metric type")
+	return nil, ErrBadMetricType
 }
 
-func (s *Service) GetAll() []models.Metrics {
+func (s *Service) GetAll(ctx context.Context) ([]models.Metrics, error) {
 	res := make([]models.Metrics, 0)
 
-	values := s.repo.GetAll()
+	values, err := s.repo.GetAll(ctx)
+	if err != nil {
+		if !errors.Is(err, repoErrors.ErrorEmptyResult) {
+			logger.Log.Warn("Couldn't get metrics", zap.Error(err))
+			return nil, err
+		}
+		return res, nil
+	}
 
 	for name, iValue := range values[models.Gauge] {
 		val, _ := iValue.(float64)
@@ -98,5 +129,5 @@ func (s *Service) GetAll() []models.Metrics {
 			Delta: &val,
 		})
 	}
-	return res
+	return res, nil
 }

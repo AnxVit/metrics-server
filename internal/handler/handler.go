@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"reflect"
@@ -14,12 +15,13 @@ import (
 
 	"github.com/AnxVit/metrics-server/internal/handler/middleware"
 	models "github.com/AnxVit/metrics-server/internal/model"
+	"github.com/AnxVit/metrics-server/internal/service"
 )
 
 type iService interface {
-	SaveMetric(metric *models.Metrics) error
-	GetMetric(metricType, name string) (*models.Metrics, error)
-	GetAll() []models.Metrics
+	SaveMetric(ctx context.Context, metric *models.Metrics) error
+	GetMetric(ctx context.Context, metricType, name string) (*models.Metrics, error)
+	GetAll(ctx context.Context) ([]models.Metrics, error)
 }
 
 type Handler struct {
@@ -52,7 +54,12 @@ func NewHandler(service iService, conn *pgx.Conn) *Handler {
 }
 
 func (h *Handler) handleGetAll(w http.ResponseWriter, r *http.Request) {
-	metrics := h.service.GetAll()
+	ctx := r.Context()
+	metrics, err := h.service.GetAll(ctx)
+	if err != nil {
+		http.Error(w, "", 500)
+		return
+	}
 
 	html := `<!DOCTYPE html>
 <html>
@@ -113,9 +120,19 @@ func (h *Handler) handleGetMetric(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	metric, err := h.service.GetMetric(req.MType, req.ID)
-	if err != nil || metric == nil {
-		http.Error(w, "", http.StatusNotFound)
+	ctx := r.Context()
+
+	metric, err := h.service.GetMetric(ctx, req.MType, req.ID)
+	if metric == nil {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		if errors.Is(err, service.ErrBadMetricType) {
+			http.Error(w, "bad metric type", http.StatusBadRequest)
+			return
+		}
+		http.Error(w, "", http.StatusInternalServerError)
 		return
 	}
 
@@ -139,9 +156,19 @@ func (h *Handler) handleGetMetricParameters(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	metric, err := h.service.GetMetric(metricType, metricName)
-	if err != nil || metric == nil {
-		http.Error(w, "", http.StatusNotFound)
+	ctx := r.Context()
+
+	metric, err := h.service.GetMetric(ctx, metricType, metricName)
+	if metric == nil {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		if errors.Is(err, service.ErrBadMetricType) {
+			http.Error(w, "bad metric type", http.StatusBadRequest)
+			return
+		}
+		http.Error(w, "", http.StatusInternalServerError)
 		return
 	}
 
@@ -156,7 +183,7 @@ func (h *Handler) handleGetMetricParameters(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		http.Error(w, "", 500)
 		return
 	}
 
@@ -183,8 +210,10 @@ func (h *Handler) handlePostMetric(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.service.SaveMetric(&req); err != nil {
-		http.Error(w, "", http.StatusBadRequest)
+	ctx := r.Context()
+
+	if err := h.service.SaveMetric(ctx, &req); err != nil {
+		http.Error(w, "", http.StatusInternalServerError)
 		return
 	}
 
@@ -217,8 +246,18 @@ func (h *Handler) handlePostMetricParameters(w http.ResponseWriter, r *http.Requ
 		metric.Value = &value
 	}
 
-	if err := h.service.SaveMetric(metric); err != nil {
-		http.Error(w, "", http.StatusBadRequest)
+	ctx := r.Context()
+
+	if err := h.service.SaveMetric(ctx, metric); err != nil {
+		if errors.Is(err, service.ErrBadMetricType) {
+			http.Error(w, "bad metric type", http.StatusBadRequest)
+			return
+		}
+		if errors.Is(err, service.ErrBadMetricValue) {
+			http.Error(w, "bad metric value", http.StatusBadRequest)
+			return
+		}
+		http.Error(w, "", http.StatusInternalServerError)
 		return
 	}
 
