@@ -27,7 +27,7 @@ func main() {
 
 	service := service.NewService(repo)
 
-	conn, err := pgx.Connect(context.Background(), opt.DATABASE_DSN)
+	conn, err := pgx.Connect(context.Background(), opt.DatabaseDSN)
 	if err != nil {
 		logger.Log.Warn(fmt.Sprintf("Couldn't connect to database"), zap.Error(err))
 	}
