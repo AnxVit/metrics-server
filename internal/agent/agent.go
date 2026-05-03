@@ -164,7 +164,7 @@ func (a *Agent) sendInfo(client *resty.Client, models []models.Metrics) error {
 		SetHeader("Content-Type", "application/json").
 		SetHeader("Content-Encoding", "gzip").
 		SetBody(jsonBody).
-		Post(a.addr + "/update")
+		Post(a.addr + "/updates")
 	if err != nil || resp.StatusCode() != 200 {
 		return fmt.Errorf("bad answer: %s", resp.String())
 	}
