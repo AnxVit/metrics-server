@@ -17,8 +17,7 @@ import (
 )
 
 const (
-	commandUP    = "up"
-	migrationDir = "./migrations/pgmigrations"
+	commandUP = "up"
 )
 
 func main() {
@@ -29,7 +28,7 @@ func main() {
 
 	ctx := context.Background()
 
-	migrations.Migrate(opt.DatabaseDSN, commandUP, migrationDir, []string{})
+	migrations.Migrate(opt.DatabaseDSN, commandUP, []string{})
 
 	conn, err := pgx.Connect(ctx, opt.DatabaseDSN)
 	if err != nil {
