@@ -133,7 +133,7 @@ func (d *Database) SaveCounter(ctx context.Context, name string, value int64) er
 func (d *Database) GetGauge(ctx context.Context, name string) (float64, error) {
 	var value float64
 	err := d.retrier.Do(func() error {
-		err := d.conn.QueryRow(context.Background(), "select value from metrics where name=$1", name).Scan(&value)
+		err := d.conn.QueryRow(ctx, "select value from metrics where name=$1", name).Scan(&value)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return dbErrors.ErrorEmptyResult
@@ -149,7 +149,7 @@ func (d *Database) GetGauge(ctx context.Context, name string) (float64, error) {
 func (d *Database) GetCounter(ctx context.Context, name string) (int64, error) {
 	var delta int64
 	err := d.retrier.Do(func() error {
-		err := d.conn.QueryRow(context.Background(), "select delta from metrics where name=$1", name).Scan(&delta)
+		err := d.conn.QueryRow(ctx, "select delta from metrics where name=$1", name).Scan(&delta)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return dbErrors.ErrorEmptyResult
