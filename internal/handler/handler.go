@@ -11,15 +11,16 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/AnxVit/metrics-server/internal/handler/middleware"
+	"github.com/AnxVit/metrics-server/internal/logger"
 	models "github.com/AnxVit/metrics-server/internal/model"
 	"github.com/AnxVit/metrics-server/internal/service"
 )
 
 type iService interface {
-	SaveMetric(ctx context.Context, metric *models.Metrics) error
+	SaveMetrics(ctx context.Context, metric []*models.Metrics) error
 	GetMetric(ctx context.Context, metricType, name string) (*models.Metrics, error)
 	GetAll(ctx context.Context) ([]models.Metrics, error)
 }
@@ -28,10 +29,10 @@ type Handler struct {
 	chi.Router
 
 	service      iService
-	postgresConn *pgx.Conn
+	postgresConn *pgxpool.Pool
 }
 
-func NewHandler(service iService, conn *pgx.Conn) *Handler {
+func NewHandler(service iService, conn *pgxpool.Pool) *Handler {
 	h := &Handler{
 		service:      service,
 		postgresConn: conn,
@@ -44,6 +45,7 @@ func NewHandler(service iService, conn *pgx.Conn) *Handler {
 		r.Get("/", h.handleGetAll)
 		r.Post("/value", h.handleGetMetric)
 		r.Post("/update", h.handlePostMetric)
+		r.Post("/updates", h.handlePostMetrics)
 		r.Get("/value/{type}/{name}", h.handleGetMetricParameters)
 		r.Post("/update/{type}/{name}/{value}", h.handlePostMetricParameters)
 		r.Get("/ping", h.handlePing)
@@ -190,16 +192,17 @@ func (h *Handler) handleGetMetricParameters(w http.ResponseWriter, r *http.Reque
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusOK)
 	w.Write(resp)
-
 }
 
 func (h *Handler) handlePostMetric(w http.ResponseWriter, r *http.Request) {
-	var req models.Metrics
+	var req *models.Metrics
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
+		logger.Log.Warn(err.Error())
 		http.Error(w, "bad request format", 400)
 		return
 	}
+
 	if req.MType == "" || req.ID == "" {
 		http.Error(w, "bad request values", 400)
 		return
@@ -212,7 +215,7 @@ func (h *Handler) handlePostMetric(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
-	if err := h.service.SaveMetric(ctx, &req); err != nil {
+	if err := h.service.SaveMetrics(ctx, []*models.Metrics{req}); err != nil {
 		http.Error(w, "", http.StatusInternalServerError)
 		return
 	}
@@ -248,7 +251,7 @@ func (h *Handler) handlePostMetricParameters(w http.ResponseWriter, r *http.Requ
 
 	ctx := r.Context()
 
-	if err := h.service.SaveMetric(ctx, metric); err != nil {
+	if err := h.service.SaveMetrics(ctx, []*models.Metrics{metric}); err != nil {
 		if errors.Is(err, service.ErrBadMetricType) {
 			http.Error(w, "bad metric type", http.StatusBadRequest)
 			return
@@ -257,6 +260,39 @@ func (h *Handler) handlePostMetricParameters(w http.ResponseWriter, r *http.Requ
 			http.Error(w, "bad metric value", http.StatusBadRequest)
 			return
 		}
+		http.Error(w, "", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(http.StatusOK)
+}
+
+type UpdatesRequest []*models.Metrics
+
+func (h *Handler) handlePostMetrics(w http.ResponseWriter, r *http.Request) {
+	var req UpdatesRequest
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		http.Error(w, "bad request format", 400)
+		return
+	}
+
+	for _, metric := range req {
+		if metric.MType == "" || metric.ID == "" {
+			http.Error(w, "bad request values", 400)
+			return
+		}
+
+		if metric.Delta == nil && metric.Value == nil {
+			http.Error(w, "value or delta should set", 400)
+			return
+		}
+	}
+
+	ctx := r.Context()
+
+	if err := h.service.SaveMetrics(ctx, req); err != nil {
 		http.Error(w, "", http.StatusInternalServerError)
 		return
 	}

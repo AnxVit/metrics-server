@@ -11,16 +11,19 @@ import (
 
 	models "github.com/AnxVit/metrics-server/internal/model"
 	"github.com/AnxVit/metrics-server/internal/repository"
+	"github.com/AnxVit/metrics-server/internal/repository/mock"
 	"github.com/AnxVit/metrics-server/internal/service"
+	"github.com/golang/mock/gomock"
 )
 
 func Test_PostMetric(t *testing.T) {
 	tests := []struct {
-		name   string
-		method string
-		path   string
-		req    *models.Metrics
-		code   int
+		name      string
+		method    string
+		path      string
+		req       *models.Metrics
+		setupMock func(*mock.MockStorage)
+		code      int
 	}{
 		{
 			name:   "bad method",
@@ -53,13 +56,25 @@ func Test_PostMetric(t *testing.T) {
 				MType: "gauge",
 				Value: toPointer(70.0),
 			},
+			setupMock: func(repo *mock.MockStorage) {
+				repo.EXPECT().SaveMetrics(gomock.Any(), []*models.Metrics{{
+					ID:    "someMetrics",
+					MType: "gauge",
+					Value: toPointer(float64(70.0)),
+				}})
+			},
 			code: 200,
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			ctx := context.Background()
-			repo := repository.NewRepository(ctx, nil, "", time.Hour, false) // later mock
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			repo := mock.NewMockStorage(ctrl)
+			if test.setupMock != nil {
+				test.setupMock(repo)
+			}
 			serv := service.NewService(repo)
 
 			h := NewHandler(serv, nil)
@@ -84,17 +99,18 @@ func Test_GetMetric(t *testing.T) {
 	ctx := context.Background()
 	repo := repository.NewRepository(ctx, nil, "", time.Hour, false) // later mock
 	serv := service.NewService(repo)
-	serv.SaveMetric(context.Background(), &models.Metrics{
+	serv.SaveMetrics(context.Background(), []*models.Metrics{{
 		ID:    "someMetric",
 		MType: models.Gauge,
 		Value: toPointer(37.0),
-	})
+	}})
 	tests := []struct {
-		name   string
-		method string
-		path   string
-		req    *models.Metrics
-		code   int
+		name      string
+		method    string
+		path      string
+		req       *models.Metrics
+		setupMock func(*mock.MockStorage)
+		code      int
 	}{
 		{
 			name:   "bad method",
@@ -124,11 +140,23 @@ func Test_GetMetric(t *testing.T) {
 				ID:    "someMetric",
 				MType: "gauge",
 			},
+			setupMock: func(repo *mock.MockStorage) {
+				repo.EXPECT().GetGauge(gomock.Any(), "someMetric").Return(float64(0.0), nil)
+			},
 			code: 200,
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			repo := mock.NewMockStorage(ctrl)
+			if test.setupMock != nil {
+				test.setupMock(repo)
+			}
+
+			serv := service.NewService(repo)
 
 			h := NewHandler(serv, nil)
 
@@ -150,10 +178,11 @@ func Test_GetMetric(t *testing.T) {
 
 func Test_PostMetricParams(t *testing.T) {
 	tests := []struct {
-		name   string
-		method string
-		path   string
-		code   int
+		name      string
+		method    string
+		path      string
+		setupMock func(*mock.MockStorage)
+		code      int
 	}{
 		{
 			name:   "bad method",
@@ -183,13 +212,28 @@ func Test_PostMetricParams(t *testing.T) {
 			name:   "success",
 			method: http.MethodPost,
 			path:   "/update/gauge/someMetrics/70.0",
-			code:   200,
+			setupMock: func(repo *mock.MockStorage) {
+				repo.EXPECT().SaveMetrics(
+					gomock.Any(), []*models.Metrics{
+						{
+							ID:    "someMetrics",
+							MType: "gauge",
+							Value: toPointer(float64(70.0)),
+						},
+					})
+			},
+			code: 200,
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			ctx := context.Background()
-			repo := repository.NewRepository(ctx, nil, "", time.Hour, false) // later mock
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			repo := mock.NewMockStorage(ctrl)
+			if test.setupMock != nil {
+				test.setupMock(repo)
+			}
 			serv := service.NewService(repo)
 
 			h := NewHandler(serv, nil)
@@ -207,19 +251,12 @@ func Test_PostMetricParams(t *testing.T) {
 }
 
 func Test_GetParameters(t *testing.T) {
-	ctx := context.Background()
-	repo := repository.NewRepository(ctx, nil, "", time.Hour, false) // later mock
-	serv := service.NewService(repo)
-	serv.SaveMetric(context.Background(), &models.Metrics{
-		ID:    "someMetric",
-		MType: models.Gauge,
-		Value: toPointer(37.0),
-	})
 	tests := []struct {
-		name   string
-		method string
-		path   string
-		code   int
+		name      string
+		method    string
+		path      string
+		setupMock func(*mock.MockStorage)
+		code      int
 	}{
 		{
 			name:   "bad method",
@@ -237,11 +274,25 @@ func Test_GetParameters(t *testing.T) {
 			name:   "success",
 			method: http.MethodGet,
 			path:   "/value/gauge/someMetric",
-			code:   200,
+			setupMock: func(repo *mock.MockStorage) {
+				repo.EXPECT().
+					GetGauge(gomock.Any(), "someMetric").
+					Return(float64(0.0), nil)
+			},
+			code: 200,
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			repo := mock.NewMockStorage(ctrl)
+			if test.setupMock != nil {
+				test.setupMock(repo)
+			}
+
+			serv := service.NewService(repo)
 
 			h := NewHandler(serv, nil)
 

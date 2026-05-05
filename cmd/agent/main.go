@@ -7,6 +7,7 @@ import (
 func main() {
 	var opt Options
 	parseFlag(&opt)
+
 	client := agent.NewAgent(
 		opt.Addr,
 		opt.ReportInterval,

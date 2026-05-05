@@ -3,19 +3,22 @@ package service
 import (
 	"context"
 	"testing"
-	"time"
 
-	models "github.com/AnxVit/metrics-server/internal/model"
-	"github.com/AnxVit/metrics-server/internal/repository"
+	repoErrors "github.com/AnxVit/metrics-server/internal/repository/errors"
+	"github.com/AnxVit/metrics-server/internal/repository/mock"
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	models "github.com/AnxVit/metrics-server/internal/model"
 )
 
 func Test_SaveMetric(t *testing.T) {
 	tests := []struct {
-		name     string
-		metric   models.Metrics
-		errorMsg string
+		name      string
+		metric    models.Metrics
+		setupMock func(*mock.MockStorage)
+		errorMsg  string
 	}{
 		{
 			name: "success gauge",
@@ -24,6 +27,15 @@ func Test_SaveMetric(t *testing.T) {
 				MType: models.Gauge,
 				Value: toPointer(0.0),
 			},
+			setupMock: func(repo *mock.MockStorage) {
+				repo.EXPECT().
+					SaveMetrics(gomock.Any(), []*models.Metrics{{
+						ID:    "id",
+						MType: models.Gauge,
+						Value: toPointer(float64(0.0)),
+					}}).
+					Return(nil)
+			},
 		},
 		{
 			name: "success counter",
@@ -31,6 +43,15 @@ func Test_SaveMetric(t *testing.T) {
 				ID:    "id",
 				MType: models.Counter,
 				Delta: toPointer(int64(0)),
+			},
+			setupMock: func(repo *mock.MockStorage) {
+				repo.EXPECT().
+					SaveMetrics(gomock.Any(), []*models.Metrics{{
+						ID:    "id",
+						MType: models.Counter,
+						Delta: toPointer(int64(0)),
+					}}).
+					Return(nil)
 			},
 		},
 		{
@@ -63,10 +84,17 @@ func Test_SaveMetric(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			ctx := context.Background()
-			repo := repository.NewRepository(ctx, nil, "", time.Hour, false) // later mock
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			repo := mock.NewMockStorage(ctrl)
+			if test.setupMock != nil {
+				test.setupMock(repo)
+			}
+
 			serv := NewService(repo)
 
-			err := serv.SaveMetric(ctx, &test.metric)
+			err := serv.SaveMetrics(ctx, []*models.Metrics{&test.metric})
 			if test.errorMsg == "" {
 				require.NoError(t, err)
 			} else {
@@ -78,14 +106,13 @@ func Test_SaveMetric(t *testing.T) {
 
 func Test_GetMetric(t *testing.T) {
 	ctx := context.Background()
-	repo := repository.NewRepository(ctx, nil, "", time.Hour, false) // later mock
-	repo.SaveCounter(ctx, "counter1", 0)
-	repo.SaveGauge(ctx, "gauge1", 0.0)
+
 	tests := []struct {
-		name     string
-		input    models.Metrics
-		expected *models.Metrics
-		errorMsg string
+		name      string
+		input     models.Metrics
+		expected  *models.Metrics
+		setupMock func(*mock.MockStorage)
+		errorMsg  string
 	}{
 		{
 			name: "success gauge",
@@ -98,6 +125,11 @@ func Test_GetMetric(t *testing.T) {
 				MType: models.Gauge,
 				Value: toPointer(0.0),
 			},
+			setupMock: func(repo *mock.MockStorage) {
+				repo.EXPECT().
+					GetGauge(gomock.Any(), "gauge1").
+					Return(float64(0.0), nil)
+			},
 		},
 		{
 			name: "success counter",
@@ -109,6 +141,11 @@ func Test_GetMetric(t *testing.T) {
 				ID:    "counter1",
 				MType: models.Counter,
 				Delta: toPointer(int64(0)),
+			},
+			setupMock: func(repo *mock.MockStorage) {
+				repo.EXPECT().
+					GetCounter(gomock.Any(), "counter1").
+					Return(int64(0), nil)
 			},
 		},
 		{
@@ -126,10 +163,23 @@ func Test_GetMetric(t *testing.T) {
 				ID:    "counter2",
 				MType: models.Counter,
 			},
+			setupMock: func(repo *mock.MockStorage) {
+				repo.EXPECT().
+					GetCounter(gomock.Any(), "counter2").
+					Return(int64(0), repoErrors.ErrorEmptyResult)
+			},
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			repo := mock.NewMockStorage(ctrl)
+			if test.setupMock != nil {
+				test.setupMock(repo)
+			}
+
 			serv := NewService(repo)
 
 			metric, err := serv.GetMetric(ctx, test.input.MType, test.input.ID)

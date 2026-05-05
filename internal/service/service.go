@@ -17,8 +17,7 @@ var (
 )
 
 type iRepo interface {
-	SaveGauge(ctx context.Context, name string, value float64) error
-	SaveCounter(ctx context.Context, name string, value int64) error
+	SaveMetrics(ctx context.Context, metrics []*models.Metrics) error
 
 	GetGauge(ctx context.Context, name string) (float64, error)
 	GetCounter(ctx context.Context, name string) (int64, error)
@@ -36,30 +35,30 @@ func NewService(repo iRepo) *Service {
 	}
 }
 
-func (s *Service) SaveMetric(ctx context.Context, metric *models.Metrics) error {
-	metricType := strings.TrimSpace(strings.ToLower(metric.MType))
-	var err error
+func (s *Service) SaveMetrics(ctx context.Context, metrics []*models.Metrics) error {
+	for _, metric := range metrics {
+		metric.MType = strings.TrimSpace(strings.ToLower(metric.MType))
 
-	switch metricType {
-	case models.Gauge:
-		if metric.Value == nil {
-			return ErrBadMetricValue
+		switch metric.MType {
+		case models.Gauge:
+			if metric.Value == nil {
+				return ErrBadMetricValue
+			}
+		case models.Counter:
+			if metric.Delta == nil {
+				return ErrBadMetricValue
+			}
+		default:
+			return ErrBadMetricType
 		}
-		err = s.repo.SaveGauge(ctx, metric.ID, *metric.Value)
-	case models.Counter:
-		if metric.Delta == nil {
-			return ErrBadMetricValue
-		}
-		err = s.repo.SaveCounter(ctx, metric.ID, *metric.Delta)
-	default:
-		return ErrBadMetricType
 	}
 
+	err := s.repo.SaveMetrics(ctx, metrics)
 	if err != nil {
 		logger.Log.Warn("Couldn't save metric", zap.Error(err))
 	}
 
-	return nil
+	return err
 }
 
 func (s *Service) GetMetric(ctx context.Context, metricType, name string) (*models.Metrics, error) {

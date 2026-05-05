@@ -3,10 +3,7 @@ package migrations
 import (
 	"context"
 	"embed"
-	"flag"
 	"fmt"
-	"log"
-	"os"
 
 	"github.com/AnxVit/metrics-server/internal/logger"
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -14,34 +11,8 @@ import (
 	"go.uber.org/zap"
 )
 
-var (
-	flags = flag.NewFlagSet("goose", flag.ExitOnError)
-	dir   = flags.String("dir", ".", "directory with migration files")
-)
-
 //go:embed pgmigrations/*.sql
 var migrationFiles embed.FS
-
-func main() {
-	if err := flags.Parse(os.Args[1:]); err != nil {
-		log.Fatalf("goose: failed to parse flags: %v", err)
-	}
-	args := flags.Args()
-
-	if len(args) < 3 {
-		flags.Usage()
-		return
-	}
-
-	command, dbstring := args[0], args[1]
-
-	arguments := []string{}
-	if len(args) > 2 {
-		arguments = append(arguments, args[2:]...)
-	}
-
-	Migrate(dbstring, command, arguments)
-}
 
 func Migrate(dbstring, command string, arguments []string) {
 	db, err := goose.OpenDBWithDriver("postgres", dbstring)
