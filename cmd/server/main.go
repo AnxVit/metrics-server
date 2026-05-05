@@ -1,9 +1,13 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"time"
+
+	"github.com/jackc/pgx/v5"
+	"go.uber.org/zap"
 
 	"github.com/AnxVit/metrics-server/internal/handler"
 	"github.com/AnxVit/metrics-server/internal/logger"
@@ -23,12 +27,18 @@ func main() {
 
 	service := service.NewService(repo)
 
-	handler := handler.NewHandler(service)
+	conn, err := pgx.Connect(context.Background(), opt.DatabaseDSN)
+	if err != nil {
+		logger.Log.Warn("Couldn't connect to database", zap.Error(err))
+	}
+	defer conn.Close(context.Background())
+
+	handler := handler.NewHandler(service, conn)
 
 	logger.Log.Info(fmt.Sprintf("Listen %s", opt.Addr))
 
-	err := http.ListenAndServe(opt.Addr, handler)
+	err = http.ListenAndServe(opt.Addr, handler)
 	if err != nil {
-		panic(err)
+		logger.Log.Fatal(fmt.Sprintf("Listen address: %v", opt.Addr), zap.Error(err))
 	}
 }

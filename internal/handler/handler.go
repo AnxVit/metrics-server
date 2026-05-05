@@ -1,13 +1,16 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"reflect"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/AnxVit/metrics-server/internal/handler/middleware"
 	models "github.com/AnxVit/metrics-server/internal/model"
@@ -22,12 +25,14 @@ type iService interface {
 type Handler struct {
 	chi.Router
 
-	service iService
+	service      iService
+	postgresConn *pgx.Conn
 }
 
-func NewHandler(service iService) *Handler {
+func NewHandler(service iService, conn *pgx.Conn) *Handler {
 	h := &Handler{
-		service: service,
+		service:      service,
+		postgresConn: conn,
 	}
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
@@ -39,6 +44,7 @@ func NewHandler(service iService) *Handler {
 		r.Post("/update", h.handlePostMetric)
 		r.Get("/value/{type}/{name}", h.handleGetMetricParameters)
 		r.Post("/update/{type}/{name}/{value}", h.handlePostMetricParameters)
+		r.Get("/ping", h.handlePing)
 	})
 
 	h.Router = r
@@ -213,6 +219,21 @@ func (h *Handler) handlePostMetricParameters(w http.ResponseWriter, r *http.Requ
 
 	if err := h.service.SaveMetric(metric); err != nil {
 		http.Error(w, "", http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(http.StatusOK)
+}
+
+func (h *Handler) handlePing(w http.ResponseWriter, r *http.Request) {
+	if h.postgresConn == nil && reflect.ValueOf(h.postgresConn).IsNil() {
+		http.Error(w, "", http.StatusInternalServerError)
+		return
+	}
+
+	if err := h.postgresConn.Ping(context.Background()); err != nil {
+		http.Error(w, "", http.StatusInternalServerError)
 		return
 	}
 
