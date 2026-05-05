@@ -13,6 +13,11 @@ import (
 	"github.com/AnxVit/metrics-server/internal/logger"
 	"github.com/AnxVit/metrics-server/internal/repository"
 	"github.com/AnxVit/metrics-server/internal/service"
+	"github.com/AnxVit/metrics-server/migrations"
+)
+
+const (
+	commandUP = "up"
 )
 
 func main() {
@@ -21,17 +26,24 @@ func main() {
 
 	logger.Initialize("INFO") // tmp: to cfg
 
-	repo := repository.NewMemStorage(
-		opt.FileStoragePath, time.Duration(opt.StoreInterval)*time.Second, opt.Restore,
+	ctx := context.Background()
+
+	migrations.Migrate(opt.DatabaseDSN, commandUP, []string{})
+
+	conn, err := pgx.Connect(ctx, opt.DatabaseDSN)
+	if err != nil {
+		logger.Log.Warn("Couldn't connect to database", zap.Error(err))
+	} else {
+		defer conn.Close(ctx)
+	}
+
+	repoCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	repo := repository.NewRepository(
+		repoCtx, conn, opt.FileStoragePath, time.Duration(opt.StoreInterval)*time.Second, opt.Restore,
 	)
 
 	service := service.NewService(repo)
-
-	conn, err := pgx.Connect(context.Background(), opt.DatabaseDSN)
-	if err != nil {
-		logger.Log.Warn("Couldn't connect to database", zap.Error(err))
-	}
-	defer conn.Close(context.Background())
 
 	handler := handler.NewHandler(service, conn)
 

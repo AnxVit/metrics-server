@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -48,7 +49,7 @@ func Test_SaveMetric(t *testing.T) {
 				MType: models.Gauge,
 				Delta: toPointer(int64(0)),
 			},
-			errorMsg: "bad gauge type",
+			errorMsg: "bad metric value",
 		},
 		{
 			name: "bad counter value",
@@ -56,15 +57,16 @@ func Test_SaveMetric(t *testing.T) {
 				ID:    "id",
 				MType: models.Counter,
 			},
-			errorMsg: "bad counter type",
+			errorMsg: "bad metric value",
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			repo := repository.NewMemStorage("", time.Hour, false) // later mock
+			ctx := context.Background()
+			repo := repository.NewRepository(ctx, nil, "", time.Hour, false) // later mock
 			serv := NewService(repo)
 
-			err := serv.SaveMetric(&test.metric)
+			err := serv.SaveMetric(ctx, &test.metric)
 			if test.errorMsg == "" {
 				require.NoError(t, err)
 			} else {
@@ -75,9 +77,10 @@ func Test_SaveMetric(t *testing.T) {
 }
 
 func Test_GetMetric(t *testing.T) {
-	repo := repository.NewMemStorage("", time.Hour, false) // later mock
-	repo.SaveCounter("counter1", 0)
-	repo.SaveGauge("gauge1", 0.0)
+	ctx := context.Background()
+	repo := repository.NewRepository(ctx, nil, "", time.Hour, false) // later mock
+	repo.SaveCounter(ctx, "counter1", 0)
+	repo.SaveGauge(ctx, "gauge1", 0.0)
 	tests := []struct {
 		name     string
 		input    models.Metrics
@@ -129,7 +132,7 @@ func Test_GetMetric(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			serv := NewService(repo)
 
-			metric, err := serv.GetMetric(test.input.MType, test.input.ID)
+			metric, err := serv.GetMetric(ctx, test.input.MType, test.input.ID)
 			if test.errorMsg == "" {
 				assert.NoError(t, err)
 				if test.expected != nil {
