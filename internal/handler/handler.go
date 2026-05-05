@@ -126,16 +126,16 @@ func (h *Handler) handleGetMetric(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	metric, err := h.service.GetMetric(ctx, req.MType, req.ID)
-	if metric == nil {
-		http.NotFound(w, r)
-		return
-	}
 	if err != nil {
 		if errors.Is(err, service.ErrBadMetricType) {
 			http.Error(w, "bad metric type", http.StatusBadRequest)
 			return
 		}
 		http.Error(w, "", http.StatusInternalServerError)
+		return
+	}
+	if metric == nil {
+		http.NotFound(w, r)
 		return
 	}
 
@@ -162,16 +162,16 @@ func (h *Handler) handleGetMetricParameters(w http.ResponseWriter, r *http.Reque
 	ctx := r.Context()
 
 	metric, err := h.service.GetMetric(ctx, metricType, metricName)
-	if metric == nil {
-		http.NotFound(w, r)
-		return
-	}
 	if err != nil {
 		if errors.Is(err, service.ErrBadMetricType) {
 			http.Error(w, "bad metric type", http.StatusBadRequest)
 			return
 		}
 		http.Error(w, "", http.StatusInternalServerError)
+		return
+	}
+	if metric == nil {
+		http.NotFound(w, r)
 		return
 	}
 
