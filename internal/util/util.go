@@ -37,20 +37,20 @@ func NewRetryer(
 }
 
 func VerifyHash(jsonBody []byte, hash, key string) bool {
-	hmacHash := hmac.New(sha256.New, []byte(key))
-	if _, err := hmacHash.Write(jsonBody); err != nil {
+	h := hmac.New(sha256.New, []byte(key))
+	if _, err := h.Write(jsonBody); err != nil {
 		return false
 	}
 
-	hashBody := hex.EncodeToString(hmacHash.Sum(nil))
+	hashBody := hex.EncodeToString(h.Sum(nil))
 
 	return hmac.Equal([]byte(hashBody), []byte(hash))
 }
 
 func HashByKey(jsonBody []byte, key string) (string, error) {
-	hmac := hmac.New(sha256.New, []byte(key))
-	if _, err := hmac.Write(jsonBody); err != nil {
+	h := hmac.New(sha256.New, []byte(key))
+	if _, err := h.Write(jsonBody); err != nil {
 		return "", fmt.Errorf("failed to compute HMAC: %w", err)
 	}
-	return hex.EncodeToString(hmac.Sum(nil)), nil
+	return hex.EncodeToString(h.Sum(nil)), nil
 }

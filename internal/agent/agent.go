@@ -80,14 +80,14 @@ func NewAgent(ctx context.Context, addr, key string, reportInter, pollInter, rat
 		queue: make(chan []models.Metrics, rateLimit*2),
 	}
 
-	agent.startWorks(ctx)
-
 	return agent
 }
 
 func (a *Agent) Work(ctx context.Context) error {
 	chanInfo := make(chan map[string]float64, 1)
 	chanSystem := make(chan map[string]float64, 1)
+
+	a.startWorks(ctx)
 
 	a.wg.Go(func() error {
 		ticker := time.NewTicker(a.pollInterval)
