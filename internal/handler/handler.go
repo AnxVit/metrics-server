@@ -13,6 +13,7 @@ import (
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/AnxVit/metrics-server/internal/audit"
 	"github.com/AnxVit/metrics-server/internal/handler/middleware"
 	"github.com/AnxVit/metrics-server/internal/logger"
 	models "github.com/AnxVit/metrics-server/internal/model"
@@ -30,12 +31,14 @@ type Handler struct {
 
 	service      iService
 	postgresConn *pgxpool.Pool
+	publisher    audit.Publisher
 }
 
-func NewHandler(service iService, conn *pgxpool.Pool, key string) *Handler {
+func NewHandler(service iService, conn *pgxpool.Pool, publisher audit.Publisher, key string) *Handler {
 	h := &Handler{
 		service:      service,
 		postgresConn: conn,
+		publisher:    publisher,
 	}
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
@@ -221,6 +224,8 @@ func (h *Handler) handlePostMetric(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.publisher.Notify(audit.MakeEvent([]string{req.ID}, r.RemoteAddr))
+
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusOK)
 }
@@ -265,6 +270,8 @@ func (h *Handler) handlePostMetricParameters(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	h.publisher.Notify(audit.MakeEvent([]string{metric.ID}, r.RemoteAddr))
+
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusOK)
 }
@@ -279,6 +286,7 @@ func (h *Handler) handlePostMetrics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	metricsName := make([]string, 0, len(req))
 	for _, metric := range req {
 		if metric.MType == "" || metric.ID == "" {
 			http.Error(w, "bad request values", 400)
@@ -289,6 +297,8 @@ func (h *Handler) handlePostMetrics(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "value or delta should set", 400)
 			return
 		}
+
+		metricsName = append(metricsName, metric.ID)
 	}
 
 	ctx := r.Context()
@@ -297,6 +307,8 @@ func (h *Handler) handlePostMetrics(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "", http.StatusInternalServerError)
 		return
 	}
+
+	h.publisher.Notify(audit.MakeEvent(metricsName, r.RemoteAddr))
 
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusOK)

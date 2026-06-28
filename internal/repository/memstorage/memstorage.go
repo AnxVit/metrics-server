@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"sync"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 
 	"github.com/AnxVit/metrics-server/internal/logger"
@@ -20,13 +20,13 @@ const (
 )
 
 type MemStorage struct {
-	dbConn *pgx.Conn
-
 	storePath      string
 	updateDuration time.Duration
 
 	gaugeMetrics   map[string]float64
 	counterMetrics map[string]int64
+
+	mu sync.RWMutex
 }
 
 func NewMemStorage(ctx context.Context, filePath string, updateDuration time.Duration, restore bool) *MemStorage {
@@ -50,12 +50,14 @@ func NewMemStorage(ctx context.Context, filePath string, updateDuration time.Dur
 
 func (m *MemStorage) SaveMetrics(_ context.Context, metrics []*models.Metrics) error {
 	for _, metric := range metrics {
+		m.mu.Lock()
 		switch metric.MType {
 		case typeCounter:
 			m.counterMetrics[metric.ID] += *metric.Delta
 		case typeGauge:
 			m.gaugeMetrics[metric.ID] = *metric.Value
 		}
+		m.mu.Unlock()
 	}
 	if m.updateDuration == 0 {
 		return m.saveMetricsToFile(m.getAllMetrics())
@@ -64,6 +66,8 @@ func (m *MemStorage) SaveMetrics(_ context.Context, metrics []*models.Metrics) e
 }
 
 func (m *MemStorage) GetGauge(_ context.Context, name string) (float64, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	val, ok := m.gaugeMetrics[name]
 	if !ok {
 		return 0, errors.ErrorEmptyResult
@@ -72,6 +76,8 @@ func (m *MemStorage) GetGauge(_ context.Context, name string) (float64, error) {
 }
 
 func (m *MemStorage) GetCounter(_ context.Context, name string) (int64, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	val, ok := m.counterMetrics[name]
 	if !ok {
 		return 0, errors.ErrorEmptyResult
@@ -80,6 +86,8 @@ func (m *MemStorage) GetCounter(_ context.Context, name string) (int64, error) {
 }
 
 func (m *MemStorage) GetAll(_ context.Context) (map[string]map[string]interface{}, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	values := make(map[string]map[string]interface{})
 
 	values[typeGauge] = make(map[string]interface{})
@@ -96,6 +104,8 @@ func (m *MemStorage) GetAll(_ context.Context) (map[string]map[string]interface{
 }
 
 func (m *MemStorage) getAllMetrics() []models.Metrics {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	var allMetrics []models.Metrics
 
 	for name, value := range m.gaugeMetrics {
@@ -134,6 +144,8 @@ func (m *MemStorage) restoreData() {
 		return
 	}
 
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	for _, metric := range allMetrics {
 		switch metric.MType {
 		case typeGauge:

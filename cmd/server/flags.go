@@ -15,6 +15,8 @@ type Options struct {
 	Restore         bool   `env:"RESTORE"`
 	DatabaseDSN     string `env:"DATABASE_DSN"`
 	Key             string `env:"KEY"`
+	AuditFile       string `env:"AUDIT_FILE"`
+	AuditURL        string `env:"AUDIT_URL"`
 }
 
 func parseFlag(opt *Options) {
@@ -34,6 +36,8 @@ func parseFlag(opt *Options) {
 	flag.BoolVar(&opt.Restore, "r", false, "should load previously saved values from the specified file when starting the server")
 	flag.StringVar(&opt.DatabaseDSN, "d", "", "database dsn")
 	flag.StringVar(&opt.Key, "k", "", "hash key")
+	flag.StringVar(&opt.AuditURL, "audit-url", "", "audit url")
+	flag.StringVar(&opt.AuditFile, "audit-file", "", "audit file")
 
 	flag.Parse()
 

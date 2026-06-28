@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AnxVit/metrics-server/internal/audit"
 	models "github.com/AnxVit/metrics-server/internal/model"
 	"github.com/AnxVit/metrics-server/internal/repository"
 	"github.com/AnxVit/metrics-server/internal/repository/mock"
@@ -77,7 +78,9 @@ func Test_PostMetric(t *testing.T) {
 			}
 			serv := service.NewService(repo)
 
-			h := NewHandler(serv, nil, "")
+			notifier := audit.NewNotifier()
+
+			h := NewHandler(serv, nil, notifier, "")
 
 			data, _ := json.Marshal(test.req)
 
@@ -158,7 +161,9 @@ func Test_GetMetric(t *testing.T) {
 
 			serv := service.NewService(repo)
 
-			h := NewHandler(serv, nil, "")
+			notifier := audit.NewNotifier()
+
+			h := NewHandler(serv, nil, notifier, "")
 
 			data, _ := json.Marshal(test.req)
 
@@ -236,7 +241,9 @@ func Test_PostMetricParams(t *testing.T) {
 			}
 			serv := service.NewService(repo)
 
-			h := NewHandler(serv, nil, "")
+			notifier := audit.NewNotifier()
+
+			h := NewHandler(serv, nil, notifier, "")
 
 			req := httptest.NewRequest(test.method, test.path, nil)
 			rr := httptest.NewRecorder()
@@ -294,7 +301,9 @@ func Test_GetParameters(t *testing.T) {
 
 			serv := service.NewService(repo)
 
-			h := NewHandler(serv, nil, "")
+			notifier := audit.NewNotifier()
+
+			h := NewHandler(serv, nil, notifier, "")
 
 			req := httptest.NewRequest(test.method, test.path, nil)
 			rr := httptest.NewRecorder()
