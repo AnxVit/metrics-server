@@ -3,23 +3,27 @@ package agent
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"maps"
 	"math/rand"
 	"net"
 	"net/http"
 	"runtime"
-	"sync"
 	"time"
+
+	"github.com/avast/retry-go/v5"
+	"github.com/go-resty/resty/v2"
+	"github.com/shirou/gopsutil/v3/cpu"
+	"github.com/shirou/gopsutil/v3/mem"
+	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/AnxVit/metrics-server/internal/logger"
 	models "github.com/AnxVit/metrics-server/internal/model"
 	"github.com/AnxVit/metrics-server/internal/util"
-	"github.com/avast/retry-go/v5"
-	"github.com/go-resty/resty/v2"
-	"go.uber.org/zap"
 )
 
 type Request struct {
@@ -34,9 +38,13 @@ type Agent struct {
 	key            string
 	reportInterval time.Duration
 	pollInterval   time.Duration
+	rateLimit      int
+
+	wg    *errgroup.Group
+	queue chan []models.Metrics
 }
 
-func NewAgent(addr, key string, reportInter, pollInter int) *Agent {
+func NewAgent(ctx context.Context, addr, key string, reportInter, pollInter, rateLimit int) *Agent {
 	retrier := util.NewRetryer(
 		3,
 		time.Duration(1)*time.Second,
@@ -56,7 +64,7 @@ func NewAgent(addr, key string, reportInter, pollInter int) *Agent {
 		},
 	)
 
-	return &Agent{
+	agent := &Agent{
 		client: &http.Client{
 			Timeout: 100 * time.Millisecond,
 		},
@@ -66,44 +74,143 @@ func NewAgent(addr, key string, reportInter, pollInter int) *Agent {
 		key:            key,
 		reportInterval: time.Duration(reportInter) * time.Second,
 		pollInterval:   time.Duration(pollInter) * time.Second,
+		rateLimit:      rateLimit,
+
+		wg:    new(errgroup.Group),
+		queue: make(chan []models.Metrics, rateLimit*2),
+	}
+
+	return agent
+}
+
+func (a *Agent) Work(ctx context.Context) error {
+	chanInfo := make(chan map[string]float64, 1)
+	chanSystem := make(chan map[string]float64, 1)
+
+	a.startWorks(ctx)
+
+	a.wg.Go(func() error {
+		ticker := time.NewTicker(a.pollInterval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+			case <-ctx.Done():
+				return nil
+			}
+			info := a.getRuntimeInfo()
+			select {
+			case chanInfo <- info:
+			default:
+			}
+		}
+	})
+
+	a.wg.Go(func() error {
+		ticker := time.NewTicker(a.reportInterval)
+		defer ticker.Stop()
+
+		var (
+			lastInfo   map[string]float64
+			lastSystem map[string]float64
+			pollCount  int64
+		)
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
+			case systemInfo := <-chanInfo:
+				lastInfo = make(map[string]float64)
+				maps.Copy(lastInfo, systemInfo)
+				pollCount += 1
+			case systemInfo := <-chanSystem:
+				lastSystem = make(map[string]float64)
+				maps.Copy(lastSystem, systemInfo)
+			case <-ticker.C:
+				if lastInfo != nil {
+					toSendMap := make(map[string]float64)
+					maps.Copy(toSendMap, lastSystem)
+					maps.Copy(toSendMap, lastInfo)
+					a.sendBatch(toSendMap, int64(pollCount))
+					pollCount = 0
+					lastInfo = nil
+					lastSystem = nil
+				}
+			}
+		}
+	})
+
+	a.wg.Go(func() error {
+		ticker := time.NewTicker(a.pollInterval)
+		defer ticker.Stop()
+		defer close(chanSystem)
+
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-ticker.C:
+				info := a.getSystemInfo()
+				select {
+				case chanSystem <- info:
+				default:
+				}
+			}
+		}
+	})
+
+	return a.wg.Wait()
+}
+
+func (a *Agent) startWorks(ctx context.Context) {
+	logger.Log.Info("Start workers", zap.Int16("count", int16(a.rateLimit)))
+	for i := 0; i < a.rateLimit; i++ {
+		a.wg.Go(func() error {
+			return a.worker(ctx)
+		})
 	}
 }
 
-func (a *Agent) Work() {
-	mu := &sync.Mutex{}
-	var info map[string]float64
-	var pollCount int
+func (a *Agent) worker(ctx context.Context) error {
+	client := resty.New()
 
-	wg := sync.WaitGroup{}
-
-	wg.Add(2)
-
-	go func() {
-		defer wg.Done()
-		for {
-			time.Sleep(a.pollInterval)
-			mu.Lock()
-			info = a.getRuntimeInfo()
-			pollCount += 1
-			mu.Unlock()
-		}
-	}()
-
-	go func() {
-		defer wg.Done()
-		for {
-			time.Sleep(a.reportInterval)
-			mu.Lock()
-			err := a.sendAllInfo(info, int64(pollCount))
-			if err != nil {
-				log.Printf("ERR: %v\n", err)
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case batch := <-a.queue:
+			logger.Log.Warn("Send batch")
+			if err := a.sendInfo(client, batch); err != nil {
+				logger.Log.Warn("Failed to send metrics", zap.Error(err))
 			}
-			pollCount = 0
-			mu.Unlock()
 		}
-	}()
+	}
+}
 
-	wg.Wait()
+func (a *Agent) sendBatch(info map[string]float64, poolCount int64) {
+	metrics := make([]models.Metrics, 0, len(info))
+	for name, value := range info {
+		val := value
+		metrics = append(metrics, models.Metrics{
+			ID:    name,
+			MType: "gauge",
+			Value: &val,
+		})
+	}
+
+	metrics = append(metrics, models.Metrics{
+		ID:    "PollCount",
+		MType: "counter",
+		Delta: &poolCount,
+	})
+
+	select {
+	case a.queue <- metrics:
+		logger.Log.Debug("Batch submitted",
+			zap.Int("metrics_count", len(metrics)))
+	default:
+	}
 }
 
 func (a *Agent) getRuntimeInfo() map[string]float64 {
@@ -143,38 +250,27 @@ func (a *Agent) getRuntimeInfo() map[string]float64 {
 	return runtimeInfo
 }
 
-func (a *Agent) sendAllInfo(info map[string]float64, poolCount int64) error {
-	client := resty.New()
+func (a *Agent) getSystemInfo() map[string]float64 {
+	info := make(map[string]float64)
 
-	metrics := make([]models.Metrics, 0)
-
-	for name, value := range info {
-		metrics = append(metrics, models.Metrics{
-			ID:    name,
-			MType: "gauge",
-			Value: &value,
-		})
+	memInfo, err := mem.VirtualMemory()
+	if err != nil {
+		logger.Log.Warn("Failed to get memory info", zap.Error(err))
+	} else {
+		info["TotalMemory"] = float64(memInfo.Total)
+		info["FreeMemory"] = float64(memInfo.Free)
 	}
 
-	if err := a.sendInfo(client, metrics); err != nil {
-		logger.Log.Warn("Couldn't send info to main service", zap.Error(err))
+	cpuPercent, err := cpu.Percent(500*time.Millisecond, true)
+	if err != nil {
+		logger.Log.Warn("Failed to get CPU percent", zap.Error(err))
+	} else {
+		for i, percent := range cpuPercent {
+			info[fmt.Sprintf("CPUutilization%d", i+1)] = percent
+		}
 	}
 
-	metrics = []models.Metrics{
-		{
-			ID:    "PollCount",
-			MType: "counter",
-			Delta: &poolCount,
-		},
-	}
-
-	if err := a.sendInfo(client, metrics); err != nil {
-		logger.Log.Warn("Couldn't send info to main service", zap.Error(err))
-		return err
-	}
-
-	log.Println("Successfully send")
-	return nil
+	return info
 }
 
 func (a *Agent) sendInfo(client *resty.Client, models []models.Metrics) error {
