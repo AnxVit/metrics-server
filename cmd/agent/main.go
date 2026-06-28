@@ -10,6 +10,7 @@ func main() {
 
 	client := agent.NewAgent(
 		opt.Addr,
+		opt.Key,
 		opt.ReportInterval,
 		opt.PollInterval,
 	)
