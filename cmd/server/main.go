@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 
+	"github.com/AnxVit/metrics-server/internal/audit"
 	"github.com/AnxVit/metrics-server/internal/handler"
 	"github.com/AnxVit/metrics-server/internal/logger"
 	"github.com/AnxVit/metrics-server/internal/repository"
@@ -58,7 +59,17 @@ func main() {
 
 	service := service.NewService(repo)
 
-	handler := handler.NewHandler(service, pool, opt.Key)
+	notifier := audit.NewNotifier()
+	if opt.AuditFile != "" {
+		logger.Log.Info("Audit file register", zap.String("name", opt.AuditFile))
+		notifier.Register(audit.NewAuditFile(opt.AuditFile))
+	}
+	if opt.AuditURL != "" {
+		logger.Log.Info("Audit url register", zap.String("url", opt.AuditURL))
+		notifier.Register(audit.NewAuditURL(opt.AuditURL))
+	}
+
+	handler := handler.NewHandler(service, pool, notifier, opt.Key)
 
 	logger.Log.Info(fmt.Sprintf("Listen %s", opt.Addr))
 
@@ -66,4 +77,6 @@ func main() {
 	if err != nil {
 		logger.Log.Fatal(fmt.Sprintf("Listen address: %v", opt.Addr), zap.Error(err))
 	}
+
+	notifier.Wait()
 }
